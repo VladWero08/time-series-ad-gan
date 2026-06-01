@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 
 from models.signals import SignalsReconstructDataset 
+from models.utils import gradient_penalty
 from models.utils import point_wise_error, agg_reconstruction_errors
 
 class Generator(nn.Module):
@@ -39,6 +40,7 @@ class Generator(nn.Module):
         out = self.fc(out)
         # (batch, signal_size, n_features)
         out = self.activation(out)
+        # (batch, signal_size, n_features)
         return out
 
 
@@ -73,34 +75,6 @@ class Discriminator(nn.Module):
         return out
 
 
-def gradient_penalty(d: Discriminator, real: torch.Tensor, fake: torch.Tensor, device: str) -> torch.Tensor:
-    batch_size = real.size(0)
-
-    # random interpolation weight α for each sample in the batch
-    alpha = torch.rand(batch_size, 1, 1, device=device)
-    alpha = alpha.expand_as(real)
-
-    # interpolate between real and fake
-    interpolated = (alpha * real + (1 - alpha) * fake).requires_grad_(True)
-    d_interpolated = d(interpolated)
-
-    # compute gradients of critic output w.r.t. interpolated input
-    gradients = torch.autograd.grad(
-        outputs=d_interpolated,
-        inputs=interpolated,
-        grad_outputs=torch.ones_like(d_interpolated),
-        create_graph=True,
-        retain_graph=True,
-    )[0]
-
-    # flatten gradients and compute their norm
-    gradients = gradients.view(batch_size, -1)
-    gradient_norm = gradients.norm(2, dim=1)
-    gp = ((gradient_norm - 1) ** 2).mean()
-
-    return gp
-
-
 def train(
     train_dl: DataLoader,
     signal_size: int = 100,
@@ -109,8 +83,8 @@ def train(
     epochs: int = 2000,
     n_critics: int = 5,
     lambda_gp: float = 10.0,
-    lr_g: float = 1e-5,
-    lr_d: float = 1e-5,
+    lr_g: float = 1e-4,
+    lr_d: float = 1e-4,
     beta1: float = 0.5,
     device: str = "cpu",
 ) -> t.Tuple[Generator, Discriminator]:
@@ -151,7 +125,7 @@ def train(
                 loss_d_epoch += loss_d.item()
 
         ##########################################
-        # (2) Update G network: maximize (D(G(z)))
+        # (2) Update G network: maximize D(G(z))
         ##########################################
         for _ in range(len(train_dl)):
             g.zero_grad()
@@ -200,7 +174,7 @@ def find_best_latent(
     for _ in range(iters):
         optimizer.zero_grad()
 
-        generated = g(z).squeeze(0)
+        generated = g(z)
         loss = mse(generated, data)
         torch.mean(loss).backward()
         optimizer.step()
@@ -247,14 +221,20 @@ def run_pipeline(
     d.eval()
 
     # compute reconstruction errors and plot them
-    y_test_z = find_best_latent(test_ds.X, g)
-    y_test_rec = g(y_test_z).detach()
-    y_test_sw_errors = point_wise_error(y_test_rec, test_ds.X)
-    y_test_errors = agg_reconstruction_errors(y_test_sw_errors, sw, ss)
+    idx = np.random.randint(0, len(test_ds.X))
+    sample = test_ds.X[idx].to(device).unsqueeze(0)
+    sample_best_z = find_best_latent(sample, g, signal_size=sw, latent_size=latent_size, device=device)
+    sample_rec = g(sample_best_z).detach()
+
+    # flatten both original sample and reconstructed sample
+    sample_flat = sample.squeeze(0).squeeze(-1).cpu()
+    sample_rec_flat = sample_rec.squeeze(0).squeeze(-1).cpu()
+    sample_rec_error = point_wise_error(sample_rec_flat, sample_flat)
 
     plt.figure(figsize=(10, 5))
-    plt.plot(X[train_end:], color="blue", label="Time-Series")
-    plt.plot(y_test_errors.detach(), color="orange", label="Reconstruction Error")
+    plt.plot(sample_flat, color="blue", label="Original")
+    plt.plot(sample_rec_flat, color="orange", label="Reconstruction")
+    plt.plot(sample_rec_error, color="red", label="Error")
     plt.legend()
     plt.show()
 
@@ -281,7 +261,7 @@ if __name__ == "__main__":
         y,
         sw=100,
         ss=1,
-        epochs=1,
+        epochs=10,
         batch_size=64,
         device="cuda" if torch.cuda.is_available() else "cpu"
     )

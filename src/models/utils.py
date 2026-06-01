@@ -45,6 +45,55 @@ def dtw_error(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
     return dtw_matrix[n, m]
 
 
+def gradient_penalty(d, real: torch.Tensor, fake: torch.Tensor, device: str) -> torch.Tensor:
+    """
+    Interpolates the given `real` data with the `fake` data using a convex combination, and afterwards it feeds the
+    discriminator `d` with the interpolated samples. It computes the norm of the  gradients for the discriminator w.r.t the interpolated.
+    
+    Paramters
+    ---------
+    d: Discriminator | DiscriminatorG | DiscriminatorF
+        The discriminator for which the gradient penalty is computed.
+    real: torch.Tensor
+        Batch of real time-series data.
+    fake: torch.Tensor
+        Batch of fake time-series data.
+    device: str
+        Device where to move the tensors. ("cpu" or "cuda")
+
+    Returns
+    -------
+    gp: torch.Tensor
+        Gradient penalty computed for the interpolated samples.
+    """
+    batch_size = real.size(0)
+
+    # random interpolation weight α for each sample in the batch
+    alpha = torch.rand(batch_size, 1, 1, device=device)
+    alpha = alpha.expand_as(real)
+
+    # interpolate between real and fake
+    interpolated = (alpha * real + (1 - alpha) * fake).requires_grad_(True)
+    d_interpolated = d(interpolated)
+
+    # compute gradients of critic output w.r.t. interpolated input
+    gradients = torch.autograd.grad(
+        outputs=d_interpolated,
+        inputs=interpolated,
+        grad_outputs=torch.ones_like(d_interpolated),
+        create_graph=True,
+        retain_graph=True,
+    )[0]
+
+    # flatten gradients and compute their norm
+    # NOTE: reshape ensures that the tensors is contiguous in memory by making a copy of it
+    gradients = gradients.reshape(batch_size, -1)
+    gradient_norm = gradients.norm(2, dim=1)
+    gp = ((gradient_norm - 1) ** 2).mean()
+
+    return gp
+
+
 def agg_reconstruction_errors(reconstruction_errors: torch.Tensor, sw: int, ss: int) -> torch.Tensor:
     """
     Aggregates sliding window reconstruction errors to a per-timestep error
