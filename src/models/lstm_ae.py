@@ -16,7 +16,7 @@ class TSAD_LSTM_AE(nn.Module):
         input_size: int, 
         hidden_size: int = 80, 
         num_layers: int = 2, 
-        dropout: float = 0.3,
+        dropout: float = 0.1,
     ) -> None:
         super().__init__()
 
@@ -37,11 +37,13 @@ class TSAD_LSTM_AE(nn.Module):
         )
 
         self.fc = nn.Linear(hidden_size, input_size)
+        self.activation = nn.Tanh()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        enc_out, (hn, cn) = self.encoder(x)
-        dec_out, (_, _) = self.decoder(enc_out, (hn, cn))
-        out = self.fc(dec_out)
+        encoder_out, (hn, cn) = self.encoder(x)
+        decoder_out, (_, _) = self.decoder(encoder_out, (hn, cn))
+        out = self.fc(decoder_out)
+        out = self.activation(out)
 
         return out
 
@@ -113,7 +115,7 @@ def run_pipeline(
     batch_size: int = 64,
     lr: float = 1e-3,
     device: str = "cpu"
-) -> np.ndarray:
+) -> None:
     """
     Full anomaly detection pipeline for a multivariate time series.
 
@@ -133,7 +135,7 @@ def run_pipeline(
     anomaly_matrix : np.ndarray of bool, shape (T, n_attributes)
         True where a timestep/channel pair is anomalous.
     """
-    T, n_attrs = X.shape
+    T, n_features = X.shape
     train_end = int(T * train_ratio)
     val_end   = int(T * (train_ratio + val_ratio))
 
@@ -153,7 +155,7 @@ def run_pipeline(
     test_ds  = SignalsReconstructDataset(X_test, sw=sw, ss=1)
 
     # build and train the LSTM for this channel
-    model = TSAD_LSTM_AE(input_size=n_attrs, hidden_size=hidden_size, num_layers=num_layers).to(device)
+    model = TSAD_LSTM_AE(input_size=n_features, hidden_size=hidden_size, num_layers=num_layers).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
     
@@ -198,8 +200,8 @@ def run_pipeline(
 if __name__ == "__main__":
     np.random.seed(999)
 
-    T, n_attrs = 2000, 1
-    ts = np.random.randn(T, n_attrs).cumsum(axis=0) * 0.1
+    T, n_features = 2000, 1
+    ts = np.random.randn(T, n_features).cumsum(axis=0) * 0.1
     y = np.zeros(T)
 
     # inject spike anomalies
@@ -207,8 +209,13 @@ if __name__ == "__main__":
     ts[anomaly_idx] += 15.0
     y[anomaly_idx] = 1
 
+    # min-max normalization to [-1, 1]
+    ts_min = ts.min(axis=0)
+    ts_max = ts.max(axis=0)
+    ts_normalized = 2 * (ts - ts_min) / (ts_max - ts_min) - 1
+
     run_pipeline(
-        ts,
+        ts_normalized,
         y,
         train_ratio=0.70,
         val_ratio=0.10,

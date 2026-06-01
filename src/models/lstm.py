@@ -16,7 +16,7 @@ class TSAD_LSTM(nn.Module):
         input_size: int, 
         hidden_size: int = 80, 
         num_layers: int = 2, 
-        dropout: float = 0.3
+        dropout: float = 0.1,
     ) -> None:
         super().__init__()
 
@@ -28,11 +28,13 @@ class TSAD_LSTM(nn.Module):
             dropout=dropout if num_layers > 1 else 0.0
         )
         self.fc = nn.Linear(hidden_size, input_size)
+        self.activation = nn.Tanh()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out, (hn, cn) = self.lstm(x)
         out = out[:, -1, :]
         out = self.fc(out)
+        out = self.activation(out)
 
         return out
 
@@ -103,7 +105,7 @@ def run_pipeline(
     batch_size: int = 64,
     lr: float = 1e-3,
     device: str = "cpu"
-) -> np.ndarray:
+) -> None:
     """
     Full anomaly detection pipeline for a multivariate time series.
 
@@ -123,7 +125,7 @@ def run_pipeline(
     anomaly_matrix : np.ndarray of bool, shape (T, n_attributes)
         True where a timestep/channel pair is anomalous.
     """
-    T, n_attrs = X.shape
+    T, n_features = X.shape
     train_end = int(T * train_ratio)
     val_end   = int(T * (train_ratio + val_ratio))
 
@@ -143,7 +145,7 @@ def run_pipeline(
     test_ds  = SignalsForecastDataset(X_test, sw, ss)
 
     # build and train the LSTM for this channel
-    model = TSAD_LSTM(input_size=n_attrs, hidden_size=hidden_size, num_layers=num_layers)
+    model = TSAD_LSTM(input_size=n_features, hidden_size=hidden_size, num_layers=num_layers)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
     
@@ -170,24 +172,26 @@ def run_pipeline(
     y_test_anomaly_idx = torch.where(y_test_labels == 1)[0]
 
     plt.figure(figsize=(10, 5))
-    plt.plot(y_test_preds, color="orange")
-    plt.plot(test_ds.y, color="blue")
+    plt.plot(test_ds.y, color="blue", label="Original")
+    plt.plot(y_test_preds, color="orange", label="Forecast")
     plt.scatter(y_test_anomaly_idx, test_ds.y[y_test_anomaly_idx], color="red", label="Anomaly", s=10)
     plt.legend()
     plt.show()
 
     precision, recall, f1 = evaluate_point_anomalies(y_true=y_test, y_predict=y_test_labels)
+    print()
     print("Metrics")
     print("-------")
     print(f"Precision = {precision:.4f}")
     print(f"Recall = {recall:.4f}")
     print(f"F1 = {f1:.4f}")
 
+
 if __name__ == "__main__":
     np.random.seed(999)
 
-    T, n_attrs = 2000, 1
-    ts = np.random.randn(T, n_attrs).cumsum(axis=0) * 0.1
+    T, n_features = 2000, 1
+    ts = np.random.randn(T, n_features).cumsum(axis=0) * 0.1
     y = np.zeros(T)
 
     # inject spike anomalies
@@ -195,8 +199,13 @@ if __name__ == "__main__":
     ts[anomaly_idx] += 15.0
     y[anomaly_idx] = 1
 
+    # min-max normalization to [-1, 1]
+    ts_min = ts.min(axis=0)
+    ts_max = ts.max(axis=0)
+    ts_normalized = 2 * (ts - ts_min) / (ts_max - ts_min) - 1
+
     run_pipeline(
-        ts,
+        ts_normalized,
         y,
         train_ratio=0.70,
         val_ratio=0.10,
