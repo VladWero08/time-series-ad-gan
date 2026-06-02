@@ -170,6 +170,9 @@ def train(
         loss_dz_epoch = 0.0
 
         for _ in range(n_critics):
+            # set each model to its corresponding mode to update the generators
+            dx.train(); dz.train(); gg.eval(); gf.eval()
+
             for real_x_data in train_dl:
                 real_x_data = real_x_data.to(device)
                 batch_size = real_x_data.size(0)
@@ -177,7 +180,7 @@ def train(
                 ################################################
                 # (1) Update Dx Network: maximize Dx(X) - Dx(F(z)) 
                 ################################################
-                dx.train(); gf.eval(); optim_dx.zero_grad()
+                optim_dx.zero_grad()
 
                 # generate fake batch
                 z = torch.randn(batch_size, signal_size, latent_size).to(device)
@@ -194,7 +197,7 @@ def train(
                 ################################################
                 # (2) Update Dz Network: maximize Dz(Z) - Dz(G(X))
                 ################################################
-                dz.train(); gg.eval(); optim_dz.zero_grad()
+                optim_dz.zero_grad()
                 
                 # real data is considered to be random latent samples from Z
                 real_z_data = torch.randn(batch_size, signal_size, latent_size).to(device)
@@ -217,10 +220,13 @@ def train(
             real_x_data = real_x_data.to(device)
             batch_size = real_x_data.size(0)
 
+            # set each model to its corresponding mode to update the generators
+            gg.train(); gf.train(); dz.eval(); dx.eval()
+
             #############################################################
             # (3) Update Gg Network: maximize Dz(G(x)) - MSE(x - F(G(x)))
             #############################################################            
-            gg.train(); dz.eval(); optim_gg.zero_grad()
+            optim_gg.zero_grad()
 
             fake_z_data = gg(real_x_data)
             reconstructed_x_data = gf(fake_z_data)
@@ -236,7 +242,7 @@ def train(
             ##########################################
             # (4) Update Gf Network: maximize Dx(F(z))
             ##########################################
-            gf.train(); dx.eval(); optim_gf.zero_grad()
+            optim_gf.zero_grad()
 
             z = torch.randn(batch_size, signal_size, latent_size).to(device)
             fake_x_data = gf(z)
@@ -334,7 +340,7 @@ if __name__ == "__main__":
         y,
         sw=100,
         ss=1,
-        epochs=20,
+        epochs=10,
         batch_size=64,
         device="cuda" if torch.cuda.is_available() else "cpu"
     )
