@@ -143,9 +143,9 @@ def run_pipeline(
     train_end = int(T * train_ratio)
     val_end   = int(T * (train_ratio + val_ratio))
 
-    X_train, y_train    = X[:train_end], y[:train_end]
-    X_val, y_val        = X[train_end:val_end], y[train_end:val_end]
-    X_test, y_test      = X[val_end:], y[val_end:]      
+    X_train, y_train    = X[:train_end], y[:train_end][sw:]
+    X_val, y_val        = X[train_end:val_end], y[train_end:val_end][sw:]
+    X_test, y_test      = X[val_end:], y[val_end:][sw:]  
 
     print(f"Series shape : {X.shape}")
     print(f"Train        : timesteps 0 -> {train_end}  ({train_end} steps)")
@@ -183,11 +183,11 @@ def run_pipeline(
         case "point":
             precision, recall, f1 = evaluate_point_anomalies(y_true=y_test, y_predict=y_test_labels)
         case "contextual":
-            # compute the train anomaly sequences from train labels 
-            y_train_intervals = get_anomaly_intervals(y_train) 
+            # compute the test anomaly sequences from test labels 
+            y_test_labels_intervals = get_anomaly_intervals(y_train) 
             # compute the test anomaly sequences from test forecast errors
-            y_test_intervals = detect_contextual_anomalies(y_test_errors)
-            precision, recall, f1 = evaluate_collective_anomalies(y_train_intervals, y_test_intervals)
+            y_test_errors_intervals = detect_contextual_anomalies(y_test_errors)
+            precision, recall, f1 = evaluate_collective_anomalies(y_test_labels_intervals, y_test_errors_intervals)
 
     print()
     print("Metrics")

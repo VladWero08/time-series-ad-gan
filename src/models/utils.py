@@ -189,6 +189,9 @@ def get_anomaly_intervals(
     sorts those value in a descending order, then it computes the decreasing percent of each anomaly sequence. When it finds a decreasing percent
     lower than `threshold`, it relabels all the remaining sequences as normal.       
     """
+    if not isinstance(anomaly_labels, torch.Tensor):
+        anomaly_labels = torch.tensor(anomaly_labels, dtype=torch.float)
+
     # pad both ends with 0 to catch anomalies that start at index 0 or end at the final index
     padded = torch.cat([torch.tensor([0], device=anomaly_labels.device), anomaly_labels, torch.tensor([0], device=anomaly_labels.device)])
     
