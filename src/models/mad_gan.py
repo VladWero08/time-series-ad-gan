@@ -7,9 +7,9 @@ import matplotlib.pyplot as plt
 
 from torch.utils.data import DataLoader
 
-from models.signals import SignalsReconstructDataset 
-from models.utils import gradient_penalty
-from models.utils import point_wise_error, agg_reconstruction_errors
+from src.models.signals import SignalsReconstructDataset 
+from src.models.utils import gradient_penalty
+from src.models.utils import point_wise_error, agg_reconstruction_errors
 
 class Generator(nn.Module):
     def __init__(

@@ -5,9 +5,9 @@ import matplotlib.pyplot as plt
 
 from torch.utils.data import DataLoader
 
-from models.utils import point_wise_error, detect_point_anomalies
-from models.utils import evaluate_point_anomalies
-from models.signals import SignalsForecastDataset
+from src.models.utils import point_wise_error, detect_point_anomalies
+from src.models.utils import evaluate_point_anomalies
+from src.models.signals import SignalsForecastDataset
 
 
 class TSAD_LSTM(nn.Module):

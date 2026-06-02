@@ -9,7 +9,7 @@ from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.statespace.varmax import VARMAX
 from scipy.fft import fft
 
-from models.utils import detect_point_anomalies
+from src.models.utils import detect_point_anomalies
 
 def fft_period(signal: np.array) -> int:
     """
