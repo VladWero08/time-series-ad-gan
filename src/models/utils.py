@@ -201,7 +201,7 @@ def build_sliding_windows_reconstruct(
 def detect_point_anomalies(
         train_errors: torch.Tensor, 
         test_errors: torch.Tensor,
-        max_std: int = 4,
+        max_std: int = 3,
     ) -> torch.Tensor:
     """
     Computes the mean and standard deviation of forecasting errors on training data, then uses those to define what 'normality' is: 
@@ -228,43 +228,98 @@ def detect_point_anomalies(
     std = torch.std(train_errors).item()
 
     for test_error in test_errors:
-        is_inside = (mu - max_std * std) <= test_error <= (mu + max_std * std)
-        is_anomaly = int(not(is_inside))
-
+        is_anomaly = test_error > (mu + max_std * std)
         labels.append(is_anomaly)
 
     labels = torch.tensor(labels)
     return labels
 
 
+def overlaps(a: t.Tuple[int, int], b: t.Tuple[int, int]) -> bool:
+    return a[0] <= b[1] and b[0] <= a[1]
+
+
+def get_anomaly_intervals(
+        anomaly_scores: torch.Tensor,
+        anomaly_labels: torch.Tensor,
+        prune: bool = False, 
+        threshold: float = 0.1,
+    ) -> t.List[t.Tuple[int, int]]:
+    """
+    Extracts the start and inclusive end index intervals of consecutive  anomalies (1s) from a binary tensor.
+    
+    To address the problem of high false positive rate, it uses a pruning technique that selects the maximum anomaly score from each sequence,
+    sorts those value in a descending order, then it computes the decreasing percent of each anomaly sequence. When it finds a decreasing percent
+    lower than `threshold`, it relabels all the remaining sequences as normal.       
+    """
+    # pad both ends with 0 to catch anomalies that start at index 0 or end at the final index
+    padded = torch.cat([torch.tensor([0], device=anomaly_labels.device), anomaly_labels, torch.tensor([0], device=anomaly_labels.device)])
+    
+    # find transitions: 
+    # diff == 1  means 0 -> 1 (start)
+    # diff == -1 means 1 -> 0 (end)
+    diff = padded[1:] - padded[:-1]
+    
+    starts = torch.where(diff == 1)[0].tolist()
+    ends = (torch.where(diff == -1)[0] - 1).tolist()
+    intervals = list(zip(starts, ends))
+    # only keep intervals that have at least 2 points
+    intervals = np.array([intervals[i] for i, (start, end) in enumerate(intervals) if (end - start) >= 1])
+
+    if prune is True:
+        # extract the maximum anomaly score for each interval
+        intervals_max = [max(anomaly_scores[start:end+1]) for start, end in intervals]
+        # sort the intervals and intervald maximums 
+        idx = np.argsort(intervals_max)[::-1]
+        intervals = np.array(intervals)[idx]
+        intervals_max = np.array(intervals_max)[idx]
+
+        for i in range(1, len(intervals_max)):
+            # compute the decrease percent
+            pi = (intervals_max[i-1] - intervals_max[i]) / intervals_max[i-1]
+
+            if pi < threshold:
+                # prune the sequences following the first decrease percent that is too low
+                intervals = intervals[:i]
+                break
+
+    intervals = intervals.tolist()
+    return intervals
+
+
 def detect_contextual_anomalies(
-        test_anomaly_scores: torch.Tensor,
-        max_std: int = 4,
+        anomaly_scores: torch.Tensor,
+        max_std: int = 3,
     ) -> torch.Tensor:
     """
     Identifies contextual anomalies in time-series data using a dynamic, sliding-window thresholding technique.
     
     Computes a local threshold for overlapping windows of size `T / 3` moving at steps of `T / 30`, where `T` is the size of the anomaly scores tensor. 
     A data point is flagged as an anomaly (1) if its score deviates from the local window mean by more than `max_std` standard deviations.
+    
+    Returns:
+    --------
+    anomaly_intervals: torch.Tensor
+        A tensor with the anomaly intervals after detection and pruning.
     """
-    T = test_anomaly_scores.shape[0]
+    T = anomaly_scores.shape[0]
     threshold_sw = T // 3
     threshold_ss = T // (3 * 10)     
-    labels = [0 for _ in range(T)]
+    anomaly_labels = [0 for _ in range(T)]
 
-    for i in range(0, T - threshold_sw, threshold_ss):
-        window = test_anomaly_scores[i:i+threshold_sw]
+    for i in range(0, T - threshold_sw + 1, threshold_ss):
+        window = anomaly_scores[i:i+threshold_sw]
         window_mean = torch.mean(window)
-        window_std = torch.std(window)
+        window_std = torch.std(window) + 1e-8
 
         for j, anomaly_score in enumerate(window):
-            is_inside = (window_mean - max_std * window_std) <= anomaly_score <= (window_mean + max_std * window_std)
-            is_anomaly = int(not(is_inside))
+            is_anomaly = int(anomaly_score > (window_mean + max_std * window_std))
+            anomaly_labels[i + j] |= is_anomaly
 
-            labels[i + j] = is_anomaly
+    anomaly_labels = torch.tensor(anomaly_labels)
+    anomaly_intervals = get_anomaly_intervals(anomaly_scores, anomaly_labels, prune=True)
 
-    labels = torch.tensor(labels)
-    return labels
+    return anomaly_intervals
 
 
 def evaluate_point_anomalies(y_true: torch.Tensor, y_predict: torch.Tensor) -> t.Tuple[float]:
@@ -311,7 +366,7 @@ def evaluate_point_anomalies(y_true: torch.Tensor, y_predict: torch.Tensor) -> t
     return precision, recall, f1
 
 
-def evaluate_collective_anomalies(y_true: torch.Tensor, y_predict: torch.Tensor) -> t.Tuple[float]:
+def evaluate_collective_anomalies(y_true_intervals: torch.Tensor, y_predict_intervals: torch.Tensor) -> t.Tuple[float]:
     """
     Computes precision, recall, and F1 score for contextual (collective) time-series anomaly detection.
 
@@ -324,28 +379,6 @@ def evaluate_collective_anomalies(y_true: torch.Tensor, y_predict: torch.Tensor)
     -------
     precision, recall, f1 : Tuple[float]
     """
-    def get_anomaly_intervals(labels: torch.Tensor) -> t.List[t.Tuple[int, int]]:
-        """
-        Extracts the start and inclusive end index intervals of consecutive  anomalies (1s) from a binary tensor.        
-        """
-        # pad both ends with 0 to catch anomalies that start at index 0 or end at the final index
-        padded = torch.cat([torch.tensor([0], device=labels.device), labels, torch.tensor([0], device=labels.device)])
-        
-        # find transitions: 
-        # diff == 1  means 0 -> 1 (start)
-        # diff == -1 means 1 -> 0 (end)
-        diff = padded[1:] - padded[:-1]
-        
-        starts = torch.where(diff == 1)[0].tolist()
-        ends = (torch.where(diff == -1)[0] - 1).tolist()
-        
-        return list(zip(starts, ends))
-
-    def overlaps(a: t.Tuple[int, int], b: t.Tuple[int, int]) -> bool:
-        return a[0] <= b[1] and b[0] <= a[1]
-
-    y_true_intervals = get_anomaly_intervals(y_true)
-    y_predict_intervals = get_anomaly_intervals(y_predict)
     tp = fp = fn = 0
 
     # TP / FN: for each true anomaly interval, check if any predicted interval overlaps it
@@ -368,13 +401,10 @@ def evaluate_collective_anomalies(y_true: torch.Tensor, y_predict: torch.Tensor)
 
 
 if __name__ == "__main__":
-    rec_errors = torch.tensor([
-        [0.10, 0.20, 0.31, 0.2], 
-        [0.20, 0.20, 0.32, 0.6], 
-        [0.25, 0.20, 0.32, 0.4], 
-        [0.30, 0.20, 0.33, 0.5], 
-    ]) 
-    sw = 4
-    ss = 1
-    print(agg_reconstruction_errors(rec_errors, sw, ss))
-    
+    anomaly_scores = torch.zeros(200)
+    anomaly_scores[[1, 2, 3, 4]] = 0.90
+    anomaly_scores[[30, 31, 32, 34]] = 0.60
+    anomaly_scores[[90, 91, 92, 93]] = 0.55
+    anomaly_scores[[140, 141, 142, 143]] = 0.50
+
+    print(detect_contextual_anomalies(anomaly_scores))
