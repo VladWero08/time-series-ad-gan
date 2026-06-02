@@ -83,7 +83,7 @@ class MADGAN(nn.Module):
             device: str = "cpu",
         ) -> None:
             super().__init__()
-            
+
             self.signal_size = signal_size
             self.latent_size = latent_size
             self.n_features = n_features
@@ -220,7 +220,7 @@ def run_pipeline(
     test_ds  = SignalsReconstructDataset(X_test, sw=sw, ss=ss)
 
     # build and train discriminator and generator
-    madgan = MADGAN(sw, latent_size, n_features, 64, device)
+    madgan = MADGAN(sw, latent_size, n_features, device=device)
     train(madgan, train_dl, epochs=epochs, device=device)
     madgan.g.eval()
     madgan.d.eval()

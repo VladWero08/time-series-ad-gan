@@ -133,11 +133,33 @@ class DiscriminatorZ(nn.Module):
         return out
 
 
+class TadGAN(nn.Module):
+    def __init__(
+            self, 
+            signal_size: int = 100,
+            latent_size: int = 20,
+            n_features: int = 1,
+            g_hidden_size: int = 20,
+            f_hidden_size: int = 64,
+            device: str = "cpu",
+        ) -> None:
+            super().__init__()
+
+            self.signal_size = signal_size
+            self.latent_size = latent_size
+            self.n_features = n_features
+            self.g_hidden_size = g_hidden_size
+            self.f_hidden_size = f_hidden_size
+
+            self.gg = GeneratorG(self.latent_size, self.n_features, self.g_hidden_size).to(device)
+            self.gf = GeneratorF(self.latent_size, self.n_features, self.f_hidden_size).to(device)
+            self.dx = DiscriminatorX(self.signal_size, self.n_features).to(device)
+            self.dz = DiscriminatorZ(self.signal_size, self.latent_size).to(device)
+            
+
 def train(
+    tadgan: TadGAN,
     train_dl: DataLoader,
-    signal_size: int = 100,
-    latent_size: int = 20,
-    n_features: int = 1,
     epochs: int = 2000,
     n_critics: int = 3,
     lambda_gp: float = 10.0,
@@ -148,16 +170,11 @@ def train(
     lr_dz: float = 1e-4,
     beta1: float = 0.5,
     device: str = "cpu",
-) -> t.Tuple[GeneratorG, GeneratorF, DiscriminatorX, DiscriminatorZ]:
-    gg = GeneratorG(latent_size=latent_size, n_features=n_features).to(device)
-    gf = GeneratorF(latent_size=latent_size, n_features=n_features).to(device)
-    dx = DiscriminatorX(signal_size=signal_size, n_features=n_features).to(device)
-    dz = DiscriminatorZ(signal_size=signal_size, latent_size=latent_size).to(device)
-
-    optim_gg = optim.Adam(gg.parameters(), lr=lr_gg, betas=(beta1, 0.999))
-    optim_gf = optim.Adam(gf.parameters(), lr=lr_gf, betas=(beta1, 0.999))
-    optim_dx = optim.Adam(dx.parameters(), lr=lr_dx, betas=(beta1, 0.999))
-    optim_dz = optim.Adam(dz.parameters(), lr=lr_dz, betas=(beta1, 0.999))
+) -> None:
+    optim_gg = optim.Adam(tadgan.gg.parameters(), lr=lr_gg, betas=(beta1, 0.999))
+    optim_gf = optim.Adam(tadgan.gf.parameters(), lr=lr_gf, betas=(beta1, 0.999))
+    optim_dx = optim.Adam(tadgan.dx.parameters(), lr=lr_dx, betas=(beta1, 0.999))
+    optim_dz = optim.Adam(tadgan.dz.parameters(), lr=lr_dz, betas=(beta1, 0.999))
 
     mse = nn.MSELoss()
 
@@ -170,12 +187,12 @@ def train(
 
         for _ in range(n_critics):
             # set each model to its corresponding mode to update the generators
-            dx.train(); dz.train(); gg.eval(); gf.eval()
+            tadgan.dx.train(); tadgan.dz.train(); tadgan.gg.eval(); tadgan.gf.eval()
 
             for real_x_data in train_dl:
                 batch_size = real_x_data.size(0)
                 real_x_data = real_x_data.to(device)
-                real_z_data = torch.randn(batch_size, signal_size, latent_size).to(device)
+                real_z_data = torch.randn(batch_size, tadgan.signal_size, tadgan.latent_size).to(device)
                 
                 ################################################
                 # (1) Update Dx Network: maximize Dx(X) - Dx(F(z)) 
@@ -183,11 +200,11 @@ def train(
                 optim_dx.zero_grad()
 
                 # generate fake data from X 
-                fake_x_data = gf(real_z_data)
+                fake_x_data = tadgan.gf(real_z_data)
 
-                loss_real = dx(real_x_data).mean()
-                loss_fake = dx(fake_x_data.detach()).mean()
-                loss_gp = gradient_penalty(dx, real_x_data, fake_x_data.detach(), device)
+                loss_real = tadgan.dx(real_x_data).mean()
+                loss_fake = tadgan.dx(fake_x_data.detach()).mean()
+                loss_gp = gradient_penalty(tadgan.dx, real_x_data, fake_x_data.detach(), device)
                 loss_dx = loss_fake - loss_real + lambda_gp * loss_gp
                 loss_dx.backward()
 
@@ -199,11 +216,11 @@ def train(
                 optim_dz.zero_grad()
                 
                 # generate fake data from Z
-                fake_z_data = gg(real_x_data)
+                fake_z_data = tadgan.gg(real_x_data)
 
-                loss_real = dz(real_z_data).mean()
-                loss_fake = dz(fake_z_data.detach()).mean()
-                loss_gp = gradient_penalty(dz, real_z_data, fake_z_data.detach(), device)
+                loss_real = tadgan.dz(real_z_data).mean()
+                loss_fake = tadgan.dz(fake_z_data.detach()).mean()
+                loss_gp = gradient_penalty(tadgan.dz, real_z_data, fake_z_data.detach(), device)
                 loss_dz = loss_fake - loss_real + lambda_gp * loss_gp
                 loss_dz.backward()
 
@@ -216,10 +233,10 @@ def train(
         for real_x_data in train_dl:
             batch_size = real_x_data.size(0)
             real_x_data = real_x_data.to(device)
-            real_z_data = torch.randn(batch_size, signal_size, latent_size).to(device)
+            real_z_data = torch.randn(batch_size, tadgan.signal_size, tadgan.latent_size).to(device)
 
             # set each model to its corresponding mode to update the generators
-            gg.train(); gf.train(); dz.eval(); dx.eval()
+            tadgan.gg.train(); tadgan.gf.train(); tadgan.dz.eval(); tadgan.dx.eval()
             optim_gg.zero_grad()
             optim_gf.zero_grad()
 
@@ -227,10 +244,10 @@ def train(
             # (3) Update G Network: maximize Dz(G(x)) - MSE(x - F(G(x)))
             #############################################################            
 
-            fake_z_data = gg(real_x_data)
-            reconstructed_x_data = gf(fake_z_data)
+            fake_z_data = tadgan.gg(real_x_data)
+            reconstructed_x_data = tadgan.gf(fake_z_data)
             # compute GAN loss for generator G
-            loss_gg_gan = -dz(fake_z_data).mean()
+            loss_gg_gan = -tadgan.dz(fake_z_data).mean()
             # compute forward cycle loss
             loss_forward_cycle = mse(real_x_data, reconstructed_x_data).mean()
 
@@ -238,9 +255,9 @@ def train(
             # (4) Update F Network: maximize Dx(F(z))
             ##########################################
 
-            fake_x_data = gf(real_z_data)
+            fake_x_data = tadgan.gf(real_z_data)
             # compute GAN loss for generator F
-            loss_gf_gan = -dx(fake_x_data).mean()
+            loss_gf_gan = -tadgan.dx(fake_x_data).mean()
             
             # compute the total loss for the generators
             loss_generators = loss_gg_gan + loss_gf_gan + lambda_fc * loss_forward_cycle
@@ -261,8 +278,6 @@ def train(
         loss_dx_epoch /= (len(train_dl) * n_critics) 
         loss_dz_epoch /= (len(train_dl) * n_critics) 
         print(f"Epoch {epoch+1:3d} | GG Loss: {loss_gg_epoch:.6f} | GF Loss: {loss_gf_epoch:.6f} | FC Loss: {loss_fc_epoch:.6f} | DX Loss: {loss_dx_epoch:.6f} | DZ Loss: {loss_dz_epoch:.6f}")
-
-    return gg, gf, dx, dz
 
 
 def run_pipeline(
@@ -291,20 +306,14 @@ def run_pipeline(
     train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
     test_ds  = SignalsReconstructDataset(X_test, sw=sw, ss=ss)
 
-    gg, gf, dx, dz = train(
-        train_dl,
-        signal_size=sw,
-        latent_size=latent_size,
-        n_features=n_features,
-        epochs=epochs,
-        device=device
-    )
-    gg.eval(); gf.eval(); dx.eval(); dz.eval()
+    tadgan = TadGAN(sw, latent_size, n_features, device=device)
+    train(tadgan, train_dl, epochs=epochs, device=device)
+    tadgan.gg.eval(); tadgan.gf.eval(); tadgan.dx.eval(); tadgan.dz.eval()
 
     # reconstruct a testing sample at random
     idx = np.random.randint(0, len(test_ds.X))
     sample = test_ds.X[idx].to(device)
-    sample_rec = gf(gg(sample)).detach()
+    sample_rec = tadgan.gf(tadgan.gg(sample)).detach()
     sample_rec_error = point_wise_error(sample_rec, sample)
 
     plt.figure(figsize=(10, 5))
@@ -337,7 +346,7 @@ if __name__ == "__main__":
         y,
         sw=100,
         ss=1,
-        epochs=10,
+        epochs=100,
         batch_size=64,
         device="cuda" if torch.cuda.is_available() else "cpu"
     )
