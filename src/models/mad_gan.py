@@ -108,10 +108,10 @@ def train(
                 
                 # generate fake batch
                 z = torch.randn(batch_size, signal_size, latent_size).to(device)
-                fake_data = g(z).detach()
+                fake_data = g(z)
                 
                 loss_real = d(real_data).mean()
-                loss_fake = d(fake_data).mean()
+                loss_fake = d(fake_data.detach()).mean()
                 loss_gp = gradient_penalty(d, real_data, fake_data.detach(), device)
 
                 # update the discriminator by minimizing -(D(X) - D(G(z))) + GP
@@ -173,8 +173,8 @@ def find_best_latent(
         optimizer.zero_grad()
 
         generated = g(z)
-        loss = mse(generated, data)
-        torch.mean(loss).backward()
+        loss = mse(generated, data).mean()
+        loss.backward()
         optimizer.step()
 
     return z.detach()
@@ -238,7 +238,7 @@ def run_pipeline(
 
 
 if __name__ == "__main__":
-    np.random.seed(999)
+    np.random.seed(42)
 
     T, n_features = 2000, 1
     ts = np.random.randn(T, n_features).cumsum(axis=0) * 0.1
