@@ -73,11 +73,29 @@ class Discriminator(nn.Module):
         return out
 
 
+class MADGAN(nn.Module):
+    def __init__(
+            self, 
+            signal_size: int = 100,
+            latent_size: int = 20,
+            n_features: int = 1,
+            hidden_size: int = 64,
+            device: str = "cpu",
+        ) -> None:
+            super().__init__()
+            
+            self.signal_size = signal_size
+            self.latent_size = latent_size
+            self.n_features = n_features
+            self.hidden_size = hidden_size
+
+            self.g = Generator(self.latent_size, self.n_features, self.hidden_size).to(device)
+            self.d = Discriminator(self.signal_size, self.n_features, self.hidden_size).to(device)
+
+
 def train(
+    madgan: MADGAN,
     train_dl: DataLoader,
-    signal_size: int = 100,
-    latent_size: int = 20,
-    n_features: int = 1,
     epochs: int = 2000,
     n_critics: int = 5,
     lambda_gp: float = 10.0,
@@ -85,12 +103,9 @@ def train(
     lr_d: float = 1e-4,
     beta1: float = 0.5,
     device: str = "cpu",
-) -> t.Tuple[Generator, Discriminator]:
-    g = Generator(latent_size=latent_size, n_features=n_features).to(device)
-    d = Discriminator(signal_size=signal_size, n_features=n_features).to(device)
-
-    optim_g = optim.Adam(g.parameters(), lr=lr_g, betas=(beta1, 0.999))
-    optim_d = optim.Adam(d.parameters(), lr=lr_d, betas=(beta1, 0.999))
+) -> None:
+    optim_g = optim.Adam(madgan.g.parameters(), lr=lr_g, betas=(beta1, 0.999))
+    optim_d = optim.Adam(madgan.d.parameters(), lr=lr_d, betas=(beta1, 0.999))
 
     for epoch in range(epochs):
         loss_d_epoch = 0.0
@@ -104,15 +119,15 @@ def train(
                 real_data = real_data.to(device)
                 batch_size = real_data.size(0) 
 
-                d.zero_grad()
+                optim_d.zero_grad()
                 
                 # generate fake batch
-                z = torch.randn(batch_size, signal_size, latent_size).to(device)
-                fake_data = g(z)
+                z = torch.randn(batch_size, madgan.signal_size, madgan.latent_size).to(device)
+                fake_data = madgan.g(z)
                 
-                loss_real = d(real_data).mean()
-                loss_fake = d(fake_data.detach()).mean()
-                loss_gp = gradient_penalty(d, real_data, fake_data.detach(), device)
+                loss_real = madgan.d(real_data).mean()
+                loss_fake = madgan.d(fake_data.detach()).mean()
+                loss_gp = gradient_penalty(madgan.d, real_data, fake_data.detach(), device)
 
                 # update the discriminator by minimizing -(D(X) - D(G(z))) + GP
                 loss_d = loss_fake - loss_real + lambda_gp * loss_gp
@@ -126,13 +141,13 @@ def train(
         # (2) Update G network: maximize D(G(z))
         ##########################################
         for _ in range(len(train_dl)):
-            g.zero_grad()
+            optim_g.zero_grad()
 
             batch_size = real_data.size(0)
-            z = torch.randn(batch_size, signal_size, latent_size).to(device)
-            fake_data = g(z)
+            z = torch.randn(batch_size, madgan.signal_size, madgan.latent_size).to(device)
+            fake_data = madgan.g(z)
             
-            loss_g = -d(fake_data).mean()
+            loss_g = -madgan.d(fake_data).mean()
             loss_g.backward()
             optim_g.step()
 
@@ -142,8 +157,6 @@ def train(
         loss_d_epoch /= (len(train_dl) * n_critics)
         loss_g_epoch /= len(train_dl)
         print(f"Epoch {epoch+1:3d} | D Loss: {loss_d_epoch:.6f} | G Loss: {loss_g_epoch:.6f}")
-
-    return g, d
 
 
 def find_best_latent(
@@ -207,22 +220,16 @@ def run_pipeline(
     test_ds  = SignalsReconstructDataset(X_test, sw=sw, ss=ss)
 
     # build and train discriminator and generator
-    g, d = train(
-        train_dl, 
-        signal_size=sw, 
-        latent_size=latent_size, 
-        n_features=n_features, 
-        epochs=epochs,
-        device=device
-    )
-    g.eval()
-    d.eval()
+    madgan = MADGAN(sw, latent_size, n_features, 64, device)
+    train(madgan, train_dl, epochs=epochs, device=device)
+    madgan.g.eval()
+    madgan.d.eval()
 
     # compute reconstruction errors and plot them
     idx = np.random.randint(0, len(test_ds.X))
     sample = test_ds.X[idx].to(device).unsqueeze(0)
-    sample_best_z = find_best_latent(sample, g, signal_size=sw, latent_size=latent_size, device=device)
-    sample_rec = g(sample_best_z).detach()
+    sample_best_z = find_best_latent(sample, madgan.g, signal_size=sw, latent_size=latent_size, device=device)
+    sample_rec = madgan.g(sample_best_z).detach()
 
     # flatten both original sample and reconstructed sample
     sample_flat = sample.squeeze(0).squeeze(-1).cpu()
