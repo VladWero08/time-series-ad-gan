@@ -102,6 +102,28 @@ def train(
     return model
 
 
+def test(
+    model: TSAD_LSTM_AE,
+    train_ds: SignalsReconstructDataset,
+    test_ds: SignalsReconstructDataset, 
+    sw: int = 100,
+    ss: int = 1,
+    device: str = "cpu",   
+) -> torch.Tensor:
+    model.eval()
+    with torch.no_grad():
+        y_train_preds = model(train_ds.X.to(device)).cpu()
+        y_train_sw_errors = point_wise_error(y_train_preds, train_ds.X)
+        y_train_errors = agg_reconstruction_errors(y_train_sw_errors, sw, ss) 
+
+        y_test_preds = model(test_ds.X.to(device)).cpu()
+        y_test_sw_errors = point_wise_error(y_test_preds, test_ds.X)
+        y_test_errors = agg_reconstruction_errors(y_test_sw_errors, sw, ss)
+
+    y_test_labels = detect_point_anomalies(y_train_errors, y_test_errors)
+    return y_test_labels
+
+
 def run_pipeline(
     X: np.ndarray,
     y: np.ndarray,
@@ -169,25 +191,8 @@ def run_pipeline(
         device=device
     )
 
-    # compute the train and test errors    
-    model.eval()
-    with torch.no_grad():
-        y_train_preds = model(train_ds.X.to(device)).cpu()
-        y_train_sw_errors = point_wise_error(y_train_preds, train_ds.X)
-        y_train_errors = agg_reconstruction_errors(y_train_sw_errors, sw, ss) 
-
-        y_test_preds = model(test_ds.X.to(device)).cpu()
-        y_test_sw_errors = point_wise_error(y_test_preds, test_ds.X)
-        y_test_errors = agg_reconstruction_errors(y_test_sw_errors, sw, ss)
-
-    y_test_labels = detect_point_anomalies(y_train_errors, y_test_errors)
-    y_test_anomaly_idx = torch.where(y_test_labels == 1)[0]
-
-    plt.figure(figsize=(10, 5))
-    plt.plot(X[val_end:], color="blue")
-    plt.scatter(y_test_anomaly_idx, X[val_end:][y_test_anomaly_idx], color="red", label="Anomaly", s=10)
-    plt.legend()
-    plt.show()
+    # compute the test labels based on the errors obtained in training
+    y_test_labels = test(model, train_ds, test_ds, sw, ss, device)
 
     precision, recall, f1 = evaluate_point_anomalies(y_true=y_test, y_predict=y_test_labels)
     print("Metrics")

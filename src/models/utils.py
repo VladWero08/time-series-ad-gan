@@ -137,7 +137,7 @@ def gradient_penalty(d, real: torch.Tensor, fake: torch.Tensor, device: str) -> 
 def detect_point_anomalies(
         train_errors: torch.Tensor, 
         test_errors: torch.Tensor,
-        max_std: int = 3,
+        max_std: int = 4,
     ) -> torch.Tensor:
     """
     Computes the mean and standard deviation of forecasting errors on training data, then uses those to define what 'normality' is: 
@@ -226,7 +226,7 @@ def get_anomaly_intervals(
 
 def detect_contextual_anomalies(
         anomaly_scores: torch.Tensor,
-        max_std: int = 3,
+        max_std: int = 4,
     ) -> torch.Tensor:
     """
     Identifies contextual anomalies in time-series data using a dynamic, sliding-window thresholding technique.

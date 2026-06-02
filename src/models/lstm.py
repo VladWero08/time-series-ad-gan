@@ -92,6 +92,24 @@ def train(
     return model
 
 
+def test(
+    model: TSAD_LSTM,
+    train_ds: SignalsForecastDataset,
+    test_ds: SignalsForecastDataset,
+    device: str = "cpu",
+) -> torch.Tensor:
+    model.eval()
+    with torch.no_grad():
+        y_train_preds = model(train_ds.X.to(device)).cpu()
+        y_train_errors = point_wise_error(y_train_preds, train_ds.y)
+
+        y_test_preds = model(test_ds.X.to(device)).cpu()
+        y_test_errors = point_wise_error(y_test_preds, test_ds.y)
+
+    y_test_labels = detect_point_anomalies(y_train_errors, y_test_errors)
+    return y_test_labels
+
+
 def run_pipeline(
     X: np.ndarray,
     y: np.ndarray,
@@ -103,7 +121,8 @@ def run_pipeline(
     num_layers: int = 2,
     epochs: int = 50,
     batch_size: int = 64,
-    lr: float = 1e-3,
+    lr: float = 1e-4,
+    patience: int = 5,
     device: str = "cpu"
 ) -> None:
     """
@@ -156,27 +175,12 @@ def run_pipeline(
         optimizer=optimizer,
         criterion=criterion,
         epochs=epochs, 
+        patience=patience,
         device=device
     )
 
-    # compute the train and test errors    
-    model.eval()
-    with torch.no_grad():
-        y_train_preds = model(train_ds.X.to(device)).cpu()
-        y_train_errors = point_wise_error(y_train_preds, train_ds.y)
-
-        y_test_preds = model(test_ds.X.to(device)).cpu()
-        y_test_errors = point_wise_error(y_test_preds, test_ds.y)
-
-    y_test_labels = detect_point_anomalies(y_train_errors, y_test_errors)
-    y_test_anomaly_idx = torch.where(y_test_labels == 1)[0]
-
-    plt.figure(figsize=(10, 5))
-    plt.plot(test_ds.y, color="blue", label="Original")
-    plt.plot(y_test_preds, color="orange", label="Forecast")
-    plt.scatter(y_test_anomaly_idx, test_ds.y[y_test_anomaly_idx], color="red", label="Anomaly", s=10)
-    plt.legend()
-    plt.show()
+    # compute the test labels based on the errors obtained in training
+    y_test_labels = test(model, train_ds, test_ds, device)    
 
     precision, recall, f1 = evaluate_point_anomalies(y_true=y_test, y_predict=y_test_labels)
     print()
