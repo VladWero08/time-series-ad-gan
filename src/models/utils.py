@@ -45,10 +45,50 @@ def dtw_error(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
     return dtw_matrix[n, m]
 
 
+def agg_reconstruction_errors(reconstruction_errors: torch.Tensor, sw: int, ss: int) -> torch.Tensor:
+    """
+    Aggregates sliding window reconstruction errors to a per-timestep error by computing the median over all windows that contain each timestep.
+
+    Parameters
+    ----------
+    reconstruction_errors : torch.Tensor
+        Reconstruction error per window and per position within that window.
+    sw : int
+        Sliding window size.
+    ss : int
+        Sliding window step size.
+
+    Returns
+    -------
+    agg_errors : torch.Tensor of shape (T,)
+        Median aggregated error value for each original timestep.
+    """
+    N = reconstruction_errors.shape[0]
+    T = (N - 1) * ss + sw
+    agg_errors = []
+
+    for i in range(T):
+        # window k covers:                   [k * ss, k * ss + sw - 1]
+        # window k contains timestep i if:   k * ss <= i <= k * ss + sw - 1
+        # the inequality based on k:         (i - sw + 1) / ss <= k <= i / ss 
+        k_min = max(0, int(np.ceil((i - sw + 1) / ss)))
+        k_max = min(N - 1, int(np.floor(i / ss)))
+
+        # position i in window k is at i-k*ss
+        errors_at_i = torch.stack([
+            reconstruction_errors[k, i - k * ss]
+            for k in range(k_min, k_max + 1)
+        ])
+        median_error = torch.median(errors_at_i)
+        agg_errors.append(median_error)
+
+    return torch.stack(agg_errors)
+
+
 def gradient_penalty(d, real: torch.Tensor, fake: torch.Tensor, device: str) -> torch.Tensor:
     """
     Interpolates the given `real` data with the `fake` data using a convex combination, and afterwards it feeds the
-    discriminator `d` with the interpolated samples. It computes the norm of the  gradients for the discriminator w.r.t the interpolated.
+    discriminator `d` with the interpolated samples. It computes the norm of the gradients for the discriminator w.r.t the interpolated samples.
     
     Paramters
     ---------
@@ -94,110 +134,6 @@ def gradient_penalty(d, real: torch.Tensor, fake: torch.Tensor, device: str) -> 
     return gp
 
 
-def agg_reconstruction_errors(reconstruction_errors: torch.Tensor, sw: int, ss: int) -> torch.Tensor:
-    """
-    Aggregates sliding window reconstruction errors to a per-timestep error
-    by computing the median over all windows that contain each timestep.
-
-    Parameters
-    ----------
-    reconstruction_errors : torch.Tensor
-        Reconstruction error per window and per position within that window.
-    sw : int
-        Sliding window size.
-    ss : int
-        Sliding window step size.
-
-    Returns
-    -------
-    agg_errors : torch.Tensor of shape (T,)
-        Median aggregated error value for each original timestep.
-    """
-    N = reconstruction_errors.shape[0]
-    T = (N - 1) * ss + sw
-    agg_errors = []
-
-    for i in range(T):
-        # window k covers:                   [k * ss, k * ss + sw - 1]
-        # window k contains timestep i if:   k * ss <= i <= k * ss + sw - 1
-        # the inequality based on k:         (i - sw + 1) / ss <= k <= i / ss 
-        k_min = max(0, int(np.ceil((i - sw + 1) / ss)))
-        k_max = min(N - 1, int(np.floor(i / ss)))
-
-        # position i in window k is at i-k*ss
-        errors_at_i = torch.stack([
-            reconstruction_errors[k, i - k * ss]
-            for k in range(k_min, k_max + 1)
-        ])
-        median_error = torch.median(errors_at_i)
-        agg_errors.append(median_error)
-
-    return torch.stack(agg_errors)
-
-
-def build_sliding_windows_forecast(
-        X: np.ndarray, 
-        sw: int = 250, 
-        ss: int = 1
-    ) -> t.Tuple[torch.Tensor]:
-    """
-    Transforms a 2D time-series array into overlapping sliding windows for forecasting tasks, in which a window of size `sw` must predict 
-    the following value of the time-series (1-value forecast).
-
-    Parameters
-    ----------
-    X: np.ndarray
-        Time-series data of shape (T, n_attributes).
-    sw: int
-        Sliding window size.
-    ss: int
-        Sliding window step size.
-
-    Returns:
-    --------
-    X_windowed, y_windowed: t.Tuple[torch.Tensor]
-        The dataset reconstructed using sliding windows.
-    """
-    X_windowed, y_windowed = [], []
-
-    for t in range(0, len(X)-sw, ss):
-        X_windowed.append(X[t:t+sw, :])
-        y_windowed.append(X[t+sw, :])
-
-    X_windowed = torch.tensor(np.array(X_windowed), dtype=torch.float32)
-    y_windowed = torch.tensor(np.array(y_windowed), dtype=torch.float32)
-
-    return X_windowed, y_windowed
-
-
-def build_sliding_windows_reconstruct(
-        X: np.ndarray, 
-        sw: int = 250, 
-        ss: int = 1
-    ) -> torch.Tensor:
-    """
-    Transforms a 2D time-series array into overlapping sliding windows for reconstruction tasks, where the windows are of length `sw`.
-
-    Parameters
-    ----------
-    X: np.ndarray
-        Time-series data of shape (T, n_attributes).
-    sw: int
-        Sliding window size.
-    ss: int
-        Sliding window step size.
-
-    Returns:
-    --------
-    X_windowed: torch.Tensor
-        The new dataset built using sliding windows.
-    """
-    X_windowed = [X[t:t+sw, :] for t in range(0, len(X)-sw, ss)]
-    X_windowed = torch.tensor(np.array(X_windowed), dtype=torch.float32)
-
-    return X_windowed
-
-
 def detect_point_anomalies(
         train_errors: torch.Tensor, 
         test_errors: torch.Tensor,
@@ -236,6 +172,7 @@ def detect_point_anomalies(
 
 
 def overlaps(a: t.Tuple[int, int], b: t.Tuple[int, int]) -> bool:
+    """Checks if the given intervals are overlapping."""
     return a[0] <= b[1] and b[0] <= a[1]
 
 
@@ -368,7 +305,7 @@ def evaluate_point_anomalies(y_true: torch.Tensor, y_predict: torch.Tensor) -> t
 
 def evaluate_collective_anomalies(y_true_intervals: torch.Tensor, y_predict_intervals: torch.Tensor) -> t.Tuple[float]:
     """
-    Computes precision, recall, and F1 score for contextual (collective) time-series anomaly detection.
+    Computes precision, recall, and F1 score for collective time-series anomaly detection.
 
     Rather than comparing labels timestep by timestep, anomalies are grouped into contiguous intervals, and the following rules are used:
     - `TP`: when an anomalous window overlaps any predicted window;
