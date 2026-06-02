@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 
 from models.signals import SignalsReconstructDataset 
 from models.utils import gradient_penalty
-from models.utils import point_wise_error, agg_reconstruction_errors
+from models.utils import point_wise_error
 
 
 class GeneratorG(nn.Module):
@@ -32,16 +32,13 @@ class GeneratorG(nn.Module):
             in_features=hidden_size*2,
             out_features=latent_size,   
         )
-        self.activation = nn.Sigmoid()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # (batch, signal_size, n_features)
         out, (hn, cn) = self.lstm(x)
         # (batch, signal_size, hidden_size)
         out = self.fc(out)
-        # (batch, signal_size, latent_size)
-        out = self.activation(out)
-        
+        # (batch, signal_size, latent_size)        
         return out
 
 
@@ -110,8 +107,8 @@ class DiscriminatorX(nn.Module):
 class DiscriminatorZ(nn.Module):
     def __init__(
         self,
-        signal_size: int = 20,
-        latent_size: int = 1,
+        signal_size: int = 100,
+        latent_size: int = 20,
         hidden_size: int = 64,
     ) -> None:
         super().__init__()
@@ -142,8 +139,9 @@ def train(
     latent_size: int = 20,
     n_features: int = 1,
     epochs: int = 2000,
-    n_critics: int = 5,
+    n_critics: int = 3,
     lambda_gp: float = 10.0,
+    lambda_fc: float = 10.0,
     lr_gg: float = 1e-4,
     lr_gf: float = 1e-4,
     lr_dx: float = 1e-4,
@@ -151,10 +149,10 @@ def train(
     beta1: float = 0.5,
     device: str = "cpu",
 ) -> t.Tuple[GeneratorG, GeneratorF, DiscriminatorX, DiscriminatorZ]:
-    gg = GeneratorG(latent_size, n_features)
-    gf = GeneratorF(latent_size, n_features)
-    dx = DiscriminatorX(signal_size, n_features)
-    dz = DiscriminatorZ(signal_size, latent_size, n_features)
+    gg = GeneratorG(latent_size=latent_size, n_features=n_features).to(device)
+    gf = GeneratorF(latent_size=latent_size, n_features=n_features).to(device)
+    dx = DiscriminatorX(signal_size=signal_size, n_features=n_features).to(device)
+    dz = DiscriminatorZ(signal_size=signal_size, latent_size=latent_size).to(device)
 
     optim_gg = optim.Adam(gg.parameters(), lr=lr_gg, betas=(beta1, 0.999))
     optim_gf = optim.Adam(gf.parameters(), lr=lr_gf, betas=(beta1, 0.999))
@@ -166,6 +164,7 @@ def train(
     for epoch in range(epochs):
         loss_gg_epoch = 0.0
         loss_gf_epoch = 0.0
+        loss_fc_epoch = 0.0
         loss_dx_epoch = 0.0
         loss_dz_epoch = 0.0
 
@@ -174,21 +173,21 @@ def train(
             dx.train(); dz.train(); gg.eval(); gf.eval()
 
             for real_x_data in train_dl:
-                real_x_data = real_x_data.to(device)
                 batch_size = real_x_data.size(0)
+                real_x_data = real_x_data.to(device)
+                real_z_data = torch.randn(batch_size, signal_size, latent_size).to(device)
                 
                 ################################################
                 # (1) Update Dx Network: maximize Dx(X) - Dx(F(z)) 
                 ################################################
                 optim_dx.zero_grad()
 
-                # generate fake batch
-                z = torch.randn(batch_size, signal_size, latent_size).to(device)
-                fake_x_data = gf(z).detach()
+                # generate fake data from X 
+                fake_x_data = gf(real_z_data)
 
                 loss_real = dx(real_x_data).mean()
-                loss_fake = dx(fake_x_data).mean()
-                loss_gp = gradient_penalty(dx, real_x_data, fake_x_data, device)
+                loss_fake = dx(fake_x_data.detach()).mean()
+                loss_gp = gradient_penalty(dx, real_x_data, fake_x_data.detach(), device)
                 loss_dx = loss_fake - loss_real + lambda_gp * loss_gp
                 loss_dx.backward()
 
@@ -199,14 +198,12 @@ def train(
                 ################################################
                 optim_dz.zero_grad()
                 
-                # real data is considered to be random latent samples from Z
-                real_z_data = torch.randn(batch_size, signal_size, latent_size).to(device)
-                # fake data is considered to be encoded samples from X
-                fake_z_data = gg(real_x_data).detach()
+                # generate fake data from Z
+                fake_z_data = gg(real_x_data)
 
                 loss_real = dz(real_z_data).mean()
-                loss_fake = dz(fake_z_data).mean()
-                loss_gp = gradient_penalty(dz, real_z_data, fake_z_data, device)
+                loss_fake = dz(fake_z_data.detach()).mean()
+                loss_gp = gradient_penalty(dz, real_z_data, fake_z_data.detach(), device)
                 loss_dz = loss_fake - loss_real + lambda_gp * loss_gp
                 loss_dz.backward()
 
@@ -217,50 +214,53 @@ def train(
                 loss_dz_epoch += loss_dz.item()
 
         for real_x_data in train_dl:
-            real_x_data = real_x_data.to(device)
             batch_size = real_x_data.size(0)
+            real_x_data = real_x_data.to(device)
+            real_z_data = torch.randn(batch_size, signal_size, latent_size).to(device)
 
             # set each model to its corresponding mode to update the generators
             gg.train(); gf.train(); dz.eval(); dx.eval()
+            optim_gg.zero_grad()
+            optim_gf.zero_grad()
 
             #############################################################
-            # (3) Update Gg Network: maximize Dz(G(x)) - MSE(x - F(G(x)))
+            # (3) Update G Network: maximize Dz(G(x)) - MSE(x - F(G(x)))
             #############################################################            
-            optim_gg.zero_grad()
 
             fake_z_data = gg(real_x_data)
             reconstructed_x_data = gf(fake_z_data)
-
+            # compute GAN loss for generator G
             loss_gg_gan = -dz(fake_z_data).mean()
-            loss_cycle = mse(real_x_data, reconstructed_x_data).mean()
-            loss_gg = loss_cycle + loss_gg_gan
-            # because the F generator will be updated next, we need to retain the graph
-            loss_gg.backward(retain_graph=True)
+            # compute forward cycle loss
+            loss_forward_cycle = mse(real_x_data, reconstructed_x_data).mean()
 
+            ##########################################
+            # (4) Update F Network: maximize Dx(F(z))
+            ##########################################
+
+            fake_x_data = gf(real_z_data)
+            # compute GAN loss for generator F
+            loss_gf_gan = -dx(fake_x_data).mean()
+            
+            # compute the total loss for the generators
+            loss_generators = loss_gg_gan + loss_gf_gan + lambda_fc * loss_forward_cycle
+            loss_generators.backward()
+
+            # backward pass for both optimizers
             optim_gg.step()
-
-            ##########################################
-            # (4) Update Gf Network: maximize Dx(F(z))
-            ##########################################
-            optim_gf.zero_grad()
-
-            z = torch.randn(batch_size, signal_size, latent_size).to(device)
-            fake_x_data = gf(z)
-
-            loss_gf = -dx(fake_x_data).mean()
-            loss_gf.backward()
-
             optim_gf.step()
 
             # metrics
-            loss_gg_epoch += loss_gg.item()
-            loss_gf_epoch += loss_gf.item()
+            loss_gg_epoch += loss_gg_gan.item()
+            loss_gf_epoch += loss_gf_gan.item()
+            loss_fc_epoch += loss_forward_cycle.item()
 
         loss_gg_epoch /= len(train_dl)
         loss_gf_epoch /= len(train_dl)
+        loss_fc_epoch /= len(train_dl)
         loss_dx_epoch /= (len(train_dl) * n_critics) 
         loss_dz_epoch /= (len(train_dl) * n_critics) 
-        print(f"Epoch {epoch+1:3d} | GG Loss: {loss_gg_epoch:.6f} | GF Loss: {loss_gf_epoch:.6f} | DX Loss: {loss_dx_epoch:.6f} | DZ Loss: {loss_dz_epoch:.6f}")
+        print(f"Epoch {epoch+1:3d} | GG Loss: {loss_gg_epoch:.6f} | GF Loss: {loss_gf_epoch:.6f} | FC Loss: {loss_fc_epoch:.6f} | DX Loss: {loss_dx_epoch:.6f} | DZ Loss: {loss_dz_epoch:.6f}")
 
     return gg, gf, dx, dz
 
@@ -299,10 +299,7 @@ def run_pipeline(
         epochs=epochs,
         device=device
     )
-    gg.eval()
-    gf.eval()
-    dx.eval()
-    dz.eval()
+    gg.eval(); gf.eval(); dx.eval(); dz.eval()
 
     # reconstruct a testing sample at random
     idx = np.random.randint(0, len(test_ds.X))

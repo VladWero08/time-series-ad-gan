@@ -86,8 +86,8 @@ def train(
     beta1: float = 0.5,
     device: str = "cpu",
 ) -> t.Tuple[Generator, Discriminator]:
-    g = Generator(latent_size=latent_size, n_features=n_features)
-    d = Discriminator(signal_size=signal_size, n_features=n_features)
+    g = Generator(latent_size=latent_size, n_features=n_features).to(device)
+    d = Discriminator(signal_size=signal_size, n_features=n_features).to(device)
 
     optim_g = optim.Adam(g.parameters(), lr=lr_g, betas=(beta1, 0.999))
     optim_d = optim.Adam(d.parameters(), lr=lr_d, betas=(beta1, 0.999))
