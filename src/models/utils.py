@@ -177,8 +177,8 @@ def overlaps(a: t.Tuple[int, int], b: t.Tuple[int, int]) -> bool:
 
 
 def get_anomaly_intervals(
-        anomaly_scores: torch.Tensor,
         anomaly_labels: torch.Tensor,
+        anomaly_scores: t.Optional[torch.Tensor] = None,
         prune: bool = False, 
         threshold: float = 0.1,
     ) -> t.List[t.Tuple[int, int]]:
@@ -254,7 +254,7 @@ def detect_contextual_anomalies(
             anomaly_labels[i + j] |= is_anomaly
 
     anomaly_labels = torch.tensor(anomaly_labels)
-    anomaly_intervals = get_anomaly_intervals(anomaly_scores, anomaly_labels, prune=True)
+    anomaly_intervals = get_anomaly_intervals(anomaly_labels, anomaly_scores, prune=True)
 
     return anomaly_intervals
 
@@ -296,9 +296,9 @@ def evaluate_point_anomalies(y_true: torch.Tensor, y_predict: torch.Tensor) -> t
                 # y_true[i] = 0 and y_predict[i] = 1
                 fp += 1
 
-    precision = tp / (tp + fp) 
-    recall = tp / (tp + fn)
-    f1 = 2 * precision * recall / (precision + recall)
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
 
     return precision, recall, f1
 
