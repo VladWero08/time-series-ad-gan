@@ -9,7 +9,10 @@ from torch.utils.data import DataLoader
 
 from src.models.signals import SignalsReconstructDataset 
 from src.models.utils import gradient_penalty
-from src.models.utils import point_wise_error, agg_reconstruction_errors
+from src.models.utils import point_wise_error, area_wise_error, dtw_error, agg_gan_errors
+from src.models.utils import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
+from src.models.utils import evaluate_point_anomalies, evaluate_collective_anomalies
+
 
 class Generator(nn.Module):
     def __init__(
@@ -193,6 +196,36 @@ def find_best_latent(
     return z.detach()
 
 
+def test(
+    model: MADGAN,
+    ds: SignalsReconstructDataset,
+    sw: int = 100,
+    ss: int = 1,
+    error_func: t.Callable = point_wise_error, 
+    alpha: float = 0.5,
+    device: str = "cpu",
+) -> torch.Tensor:
+    ds_best_z = find_best_latent(
+        ds.X, 
+        model.g, 
+        signal_size=model.signal_size, 
+        latent_size=model.latent_size, 
+        device=device
+    )
+    
+    with torch.no_grad():
+        ds_X_rec = model.g(ds_best_z).detach()
+
+        # compute the reconstruction error (T, sw, n_features)
+        rec_errors = error_func(ds_X_rec, ds.X)
+        # compute the discriminator error (T, 1)
+        disc_errors = model.d(ds_X_rec).detach()
+        # compute the final anomaly score
+        anomaly_scores = agg_gan_errors(rec_errors, disc_errors, sw=sw, ss=ss, alpha=alpha)
+        
+    return anomaly_scores
+
+
 def run_pipeline(
     X: np.ndarray,
     y: np.ndarray,
@@ -202,13 +235,17 @@ def run_pipeline(
     latent_size: int = 20,
     epochs: int = 50,
     batch_size: int = 64,
-    device: str = "cpu"
+    device: str = "cpu",
+    anomaly_type: str = "point",
 ) -> np.ndarray:
     T, n_features = X.shape
     train_end = int(T * train_ratio)
+    # because the first and last elements in the subsequences do not get many reconstruction value to aggregate from,
+    # a cutoff will be applied to both ends of the signal
+    cutoff = sw // 2
 
-    X_train, y_train    = X[:train_end], y[:train_end]
-    X_test, y_test      = X[train_end:], y[train_end:]      
+    X_train, y_train    = X[:train_end], y[:train_end][cutoff:-cutoff]
+    X_test, y_test      = X[train_end:], y[train_end:][cutoff:-cutoff]      
 
     print(f"Series shape : {X.shape}")
     print(f"Train        : timesteps 0 -> {train_end}  ({train_end} steps)")
@@ -220,39 +257,46 @@ def run_pipeline(
     test_ds  = SignalsReconstructDataset(X_test, sw=sw, ss=ss)
 
     # build and train discriminator and generator
-    madgan = MADGAN(sw, latent_size, n_features, device=device)
-    train(madgan, train_dl, epochs=epochs, device=device)
-    madgan.g.eval()
-    madgan.d.eval()
+    model = MADGAN(sw, latent_size, n_features, device=device)
+    train(model, train_dl, epochs=epochs, device=device)
+    model.g.eval()
+    model.d.eval()
 
-    # compute reconstruction errors and plot them
-    idx = np.random.randint(0, len(test_ds.X))
-    sample = test_ds.X[idx].to(device).unsqueeze(0)
-    sample_best_z = find_best_latent(sample, madgan.g, signal_size=sw, latent_size=latent_size, device=device)
-    sample_rec = madgan.g(sample_best_z).detach()
+    test_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, error_func=point_wise_error, device=device)
+    test_anomaly_scores = test_anomaly_scores[cutoff:-cutoff]
 
-    # flatten both original sample and reconstructed sample
-    sample_flat = sample.squeeze(0).squeeze(-1).cpu()
-    sample_rec_flat = sample_rec.squeeze(0).squeeze(-1).cpu()
-    sample_rec_error = point_wise_error(sample_rec_flat, sample_flat)
+    match anomaly_type:
+        case "point":
+            # compute the forecasting errors for the train set
+            train_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, error_func=point_wise_error, device=device)
+            # compute the test labels based on the forecasting errors obtained in training
+            y_test_labels = detect_point_anomalies(train_anomaly_scores, test_anomaly_scores)
 
-    plt.figure(figsize=(10, 5))
-    plt.plot(sample_flat, color="blue", label="Original")
-    plt.plot(sample_rec_flat, color="orange", label="Reconstruction")
-    plt.plot(sample_rec_error, color="red", label="Error")
-    plt.legend()
-    plt.show()
+            precision, recall, f1 = evaluate_point_anomalies(y_true=y_test, y_predict=y_test_labels)
+        case "contextual":
+            # compute the test anomaly sequences from test labels 
+            y_test_labels_intervals = get_anomaly_intervals(y_test)
+            # compute the test anomaly sequences from test forecast errors
+            y_test_errors_intervals = detect_contextual_anomalies(test_anomaly_scores)
+
+            precision, recall, f1 = evaluate_collective_anomalies(y_test_labels_intervals, y_test_errors_intervals)
+
+    print("Metrics")
+    print("-------")
+    print(f"Precision = {precision:.4f}")
+    print(f"Recall = {recall:.4f}")
+    print(f"F1 = {f1:.4f}")
 
 
 if __name__ == "__main__":
     np.random.seed(42)
 
-    T, n_features = 2000, 1
+    T, n_features = 1000, 1
     ts = np.random.randn(T, n_features).cumsum(axis=0) * 0.1
     y = np.zeros(T)
 
     # inject spike anomalies
-    anomaly_idx = [1790, 1800, 1930]
+    anomaly_idx = [790, 800, 930]
     ts[anomaly_idx] += 15.0
     y[anomaly_idx] = 1
 

@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import typing as t
 
+from scipy.stats import gaussian_kde, zscore
 
 def point_wise_error(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
     return torch.abs(y_pred - y_true)
@@ -83,6 +84,55 @@ def agg_reconstruction_errors(reconstruction_errors: torch.Tensor, sw: int, ss: 
         agg_errors.append(median_error)
 
     return torch.stack(agg_errors)
+
+
+def agg_gan_errors(
+    reconstruction_errors: torch.Tensor,
+    discriminant_errors: torch.Tensor,
+    sw: int,
+    ss: int,
+    alpha: float = 0.5,
+) -> torch.Tensor:
+    N = discriminant_errors.shape[0]
+    T = (N - 1) * ss + sw
+
+    # convert to numpy and invert the discriminant scores
+    inverted_discriminant_errors = -1 * np.array(discriminant_errors).flatten()
+    reconstruction_errors = reconstruction_errors.numpy()
+
+    # lists where the errors will be merged together from multiple windows
+    agg_re = []
+    agg_dx = []
+
+    for i in range(T):
+        k_min = max(0, int(np.ceil((i - sw + 1) / ss)))
+        k_max = min(N - 1, int(np.floor(i / ss)))
+        
+        # median of reconstruction errors
+        errors_at_t = [reconstruction_errors[k, i - k * ss] for k in range(k_min, k_max + 1)]
+        median_re = np.median(errors_at_t)
+        agg_re.append(median_re)
+        
+        # kde of discriminant scores
+        discriminants_at_t = [inverted_discriminant_errors[k] for k in range(k_min, k_max + 1)]
+        
+        if len(discriminants_at_t) > 1 and np.var(discriminants_at_t) > 1e-8:
+            # fir kernel density estimation over the overlapping window discriminant scores
+            kde = gaussian_kde(discriminants_at_t)
+
+            # sample the maximum from the distribution
+            space = np.linspace(min(discriminants_at_t), max(discriminants_at_t), 100)
+            kde_max_score = space[np.argmax(kde(space))]
+            agg_dx.append(kde_max_score)
+        else:
+            # use the mean if KDE cannot be applied
+            agg_dx.append(np.mean(discriminants_at_t))
+
+    Z_re = zscore(np.array(agg_re))
+    Z_dx = zscore(np.array(agg_dx))
+    anomaly_score = alpha * Z_re + (1 - alpha) * Z_dx
+
+    return torch.from_numpy(anomaly_score).float()
 
 
 def gradient_penalty(d, real: torch.Tensor, fake: torch.Tensor, device: str) -> torch.Tensor:
@@ -274,6 +324,10 @@ def evaluate_point_anomalies(y_true: torch.Tensor, y_predict: torch.Tensor) -> t
     -------
     precision, recall, f1 : Tuple[float]
     """
+    # handle the case when the time series does not contain any anomalies
+    if len(y_true) == 0 and len(y_predict) == 0:
+        return 1.0, 1.0, 1.0
+    
     N = y_true.shape[0]
 
     def is_point_anomaly(i: int) -> bool:
@@ -320,6 +374,10 @@ def evaluate_collective_anomalies(y_true_intervals: torch.Tensor, y_predict_inte
     -------
     precision, recall, f1 : Tuple[float]
     """
+    # handle the case when the time series does not contain any anomalies
+    if len(y_true_intervals) == 0 and len(y_predict_intervals) == 0:
+        return 1.0, 1.0, 1.0
+    
     tp = fp = fn = 0
 
     # TP / FN: for each true anomaly interval, check if any predicted interval overlaps it
