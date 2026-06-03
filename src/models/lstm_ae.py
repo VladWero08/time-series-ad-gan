@@ -5,18 +5,19 @@ import matplotlib.pyplot as plt
 
 from torch.utils.data import DataLoader
 
-from src.models.utils import point_wise_error, detect_point_anomalies, agg_reconstruction_errors
-from src.models.utils import evaluate_point_anomalies
+from src.models.utils import point_wise_error, agg_reconstruction_errors
+from src.models.utils import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
+from src.models.utils import evaluate_point_anomalies, evaluate_collective_anomalies
 from src.models.signals import SignalsReconstructDataset
 
 
 class TSAD_LSTM_AE(nn.Module):
     def __init__(
         self, 
-        input_size: int, 
+        input_size: int = 1, 
         hidden_size: int = 80, 
         num_layers: int = 2, 
-        dropout: float = 0.1,
+        dropout: float = 0.3,
     ) -> None:
         super().__init__()
 
@@ -104,24 +105,17 @@ def train(
 
 def test(
     model: TSAD_LSTM_AE,
-    train_ds: SignalsReconstructDataset,
-    test_ds: SignalsReconstructDataset, 
+    ds: SignalsReconstructDataset,
     sw: int = 100,
     ss: int = 1,
     device: str = "cpu",   
 ) -> torch.Tensor:
     model.eval()
     with torch.no_grad():
-        y_train_preds = model(train_ds.X.to(device)).cpu()
-        y_train_sw_errors = point_wise_error(y_train_preds, train_ds.X)
-        y_train_errors = agg_reconstruction_errors(y_train_sw_errors, sw, ss) 
-
-        y_test_preds = model(test_ds.X.to(device)).cpu()
-        y_test_sw_errors = point_wise_error(y_test_preds, test_ds.X)
-        y_test_errors = agg_reconstruction_errors(y_test_sw_errors, sw, ss)
-
-    y_test_labels = detect_point_anomalies(y_train_errors, y_test_errors)
-    return y_test_labels
+        ds_preds = model(ds.X.to(device)).cpu()
+        ds_sw_errors = point_wise_error(ds_preds, ds.X)
+        ds_errors = agg_reconstruction_errors(ds_sw_errors, sw, ss) 
+    return ds_errors
 
 
 def run_pipeline(
@@ -129,14 +123,16 @@ def run_pipeline(
     y: np.ndarray,
     train_ratio: float = 0.40,
     val_ratio: float = 0.10,
-    sw: int = 250,
+    sw: int = 100,
     ss: int = 1,
     hidden_size: int = 80,
     num_layers: int = 2,
     epochs: int = 50,
     batch_size: int = 64,
-    lr: float = 1e-3,
-    device: str = "cpu"
+    lr: float = 1e-4,
+    patience: int = 5,
+    device: str = "cpu",
+    anomaly_type: str = "point",
 ) -> None:
     """
     Full anomaly detection pipeline for a multivariate time series.
@@ -188,13 +184,29 @@ def run_pipeline(
         optimizer=optimizer,
         criterion=criterion,
         epochs=epochs, 
+        patience=patience,
         device=device
     )
 
-    # compute the test labels based on the errors obtained in training
-    y_test_labels = test(model, train_ds, test_ds, sw, ss, device)
+    # compute the reconstruction errors for the test set
+    y_test_errors = test(model, test_ds, sw=sw, ss=ss, device=device)
 
-    precision, recall, f1 = evaluate_point_anomalies(y_true=y_test, y_predict=y_test_labels)
+    match anomaly_type:
+        case "point":
+            # compute the forecasting errors for the train set
+            y_train_errors = test(model, train_ds, sw=sw, ss=ss, device=device)
+            # compute the test labels based on the forecasting errors obtained in training
+            y_test_labels = detect_point_anomalies(y_train_errors, y_test_errors)
+            
+            precision, recall, f1 = evaluate_point_anomalies(y_true=y_test, y_predict=y_test_labels)
+        case "contextual":
+            # compute the test anomaly sequences from test labels 
+            y_test_labels_intervals = get_anomaly_intervals(y_test) 
+            # compute the test anomaly sequences from test forecast errors
+            y_test_errors_intervals = detect_contextual_anomalies(y_test_errors)
+            
+            precision, recall, f1 = evaluate_collective_anomalies(y_test_labels_intervals, y_test_errors_intervals)
+
     print("Metrics")
     print("-------")
     print(f"Precision = {precision:.4f}")
