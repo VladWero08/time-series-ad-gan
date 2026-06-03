@@ -16,7 +16,7 @@ class TSAD_LSTM(nn.Module):
         input_size: int, 
         hidden_size: int = 80, 
         num_layers: int = 2, 
-        dropout: float = 0.1,
+        dropout: float = 0.3,
     ) -> None:
         super().__init__()
 
@@ -184,7 +184,7 @@ def run_pipeline(
             precision, recall, f1 = evaluate_point_anomalies(y_true=y_test, y_predict=y_test_labels)
         case "contextual":
             # compute the test anomaly sequences from test labels 
-            y_test_labels_intervals = get_anomaly_intervals(y_train) 
+            y_test_labels_intervals = get_anomaly_intervals(y_test) 
             # compute the test anomaly sequences from test forecast errors
             y_test_errors_intervals = detect_contextual_anomalies(y_test_errors)
             precision, recall, f1 = evaluate_collective_anomalies(y_test_labels_intervals, y_test_errors_intervals)

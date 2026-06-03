@@ -208,7 +208,7 @@ def get_anomaly_intervals(
 
     if prune is True:
         # extract the maximum anomaly score for each interval
-        intervals_max = [max(anomaly_scores[start:end+1]) for start, end in intervals]
+        intervals_max = [max(anomaly_scores[start:end+1]).item() for start, end in intervals]
         # sort the intervals and intervald maximums 
         idx = np.argsort(intervals_max)[::-1]
         intervals = np.array(intervals)[idx]
