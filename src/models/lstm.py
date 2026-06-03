@@ -174,19 +174,23 @@ def run_pipeline(
         device=device
     )
 
-    # compute the test labels based on the errors obtained in training
-    y_train_errors = test(model, train_ds, device)
+    # compute the forecasting errors for the test set
     y_test_errors = test(model, test_ds, device)
-    y_test_labels = detect_point_anomalies(y_train_errors, y_test_errors)
 
     match anomaly_type:
         case "point":
+            # compute the forecasting errors for the train set
+            y_train_errors = test(model, train_ds, device)
+            # compute the test labels based on the forecasting errors obtained in training
+            y_test_labels = detect_point_anomalies(y_train_errors, y_test_errors)
+
             precision, recall, f1 = evaluate_point_anomalies(y_true=y_test, y_predict=y_test_labels)
         case "contextual":
             # compute the test anomaly sequences from test labels 
             y_test_labels_intervals = get_anomaly_intervals(y_test) 
             # compute the test anomaly sequences from test forecast errors
             y_test_errors_intervals = detect_contextual_anomalies(y_test_errors)
+            
             precision, recall, f1 = evaluate_collective_anomalies(y_test_labels_intervals, y_test_errors_intervals)
 
     print()
