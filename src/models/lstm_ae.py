@@ -147,19 +147,17 @@ def run_pipeline(
         Fraction of data used for training (default 40% as in paper).
     val_ratio : float
         Fraction of data used for validation / early stopping (default 10%).
-
-    Returns
-    -------
-    anomaly_matrix : np.ndarray of bool, shape (T, n_attributes)
-        True where a timestep/channel pair is anomalous.
     """
     T, n_features = X.shape
     train_end = int(T * train_ratio)
     val_end   = int(T * (train_ratio + val_ratio))
+    # because the first and last elements in the subsequences do not get many reconstruction value to aggregate from,
+    # a cutoff will be applied to both ends of the signal
+    cutoff = sw // 2
 
-    X_train, y_train    = X[:train_end], y[:train_end]
-    X_val, y_val        = X[train_end:val_end], y[train_end:val_end]
-    X_test, y_test      = X[val_end:], y[val_end:]      
+    X_train, y_train    = X[:train_end], y[:train_end][cutoff:-cutoff]
+    X_val, y_val        = X[train_end:val_end], y[train_end:val_end][cutoff:-cutoff]
+    X_test, y_test      = X[val_end:], y[val_end:][cutoff:-cutoff]      
 
     print(f"Series shape : {X.shape}")
     print(f"Train        : timesteps 0 -> {train_end}  ({train_end} steps)")
@@ -190,6 +188,7 @@ def run_pipeline(
 
     # compute the reconstruction errors for the test set
     y_test_errors = test(model, test_ds, sw=sw, ss=ss, device=device)
+    y_test_errors = y_test_errors[cutoff:-cutoff]
 
     match anomaly_type:
         case "point":
@@ -197,14 +196,14 @@ def run_pipeline(
             y_train_errors = test(model, train_ds, sw=sw, ss=ss, device=device)
             # compute the test labels based on the forecasting errors obtained in training
             y_test_labels = detect_point_anomalies(y_train_errors, y_test_errors)
-            
+
             precision, recall, f1 = evaluate_point_anomalies(y_true=y_test, y_predict=y_test_labels)
         case "contextual":
             # compute the test anomaly sequences from test labels 
-            y_test_labels_intervals = get_anomaly_intervals(y_test) 
+            y_test_labels_intervals = get_anomaly_intervals(y_test)
             # compute the test anomaly sequences from test forecast errors
             y_test_errors_intervals = detect_contextual_anomalies(y_test_errors)
-            
+
             precision, recall, f1 = evaluate_collective_anomalies(y_test_labels_intervals, y_test_errors_intervals)
 
     print("Metrics")

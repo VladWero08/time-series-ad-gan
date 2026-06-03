@@ -133,11 +133,6 @@ def run_pipeline(
         Fraction of data used for training (default 40% as in paper).
     val_ratio : float
         Fraction of data used for validation / early stopping (default 10%).
-
-    Returns
-    -------
-    anomaly_matrix : np.ndarray of bool, shape (T, n_attributes)
-        True where a timestep/channel pair is anomalous.
     """
     T, n_features = X.shape
     train_end = int(T * train_ratio)
