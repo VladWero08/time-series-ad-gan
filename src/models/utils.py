@@ -164,7 +164,7 @@ def detect_point_anomalies(
     std = torch.std(train_errors).item()
 
     for test_error in test_errors:
-        is_anomaly = test_error > (mu + max_std * std)
+        is_anomaly = int((test_error > (mu + max_std * std)).item())
         labels.append(is_anomaly)
 
     labels = torch.tensor(labels)
@@ -211,6 +211,7 @@ def get_anomaly_intervals(
         intervals_max = [max(anomaly_scores[start:end+1]).item() for start, end in intervals]
         # sort the intervals and intervald maximums 
         idx = np.argsort(intervals_max)[::-1]
+
         intervals = np.array(intervals)[idx]
         intervals_max = np.array(intervals_max)[idx]
 
@@ -253,7 +254,7 @@ def detect_contextual_anomalies(
         window_std = torch.std(window) + 1e-8
 
         for j, anomaly_score in enumerate(window):
-            is_anomaly = int(anomaly_score > (window_mean + max_std * window_std))
+            is_anomaly = int((anomaly_score > (window_mean + max_std * window_std)).item())
             anomaly_labels[i + j] |= is_anomaly
 
     anomaly_labels = torch.tensor(anomaly_labels)

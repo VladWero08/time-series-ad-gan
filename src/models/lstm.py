@@ -113,7 +113,7 @@ def run_pipeline(
     ss: int = 1,
     hidden_size: int = 80,
     num_layers: int = 2,
-    epochs: int = 50,
+    epochs: int = 35,
     batch_size: int = 64,
     lr: float = 1e-4,
     patience: int = 5,
