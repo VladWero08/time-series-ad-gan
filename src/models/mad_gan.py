@@ -102,8 +102,8 @@ def train(
     epochs: int = 2000,
     n_critics: int = 5,
     lambda_gp: float = 10.0,
-    lr_g: float = 1e-4,
-    lr_d: float = 1e-4,
+    lr_g: float = 1e-5,
+    lr_d: float = 1e-5,
     beta1: float = 0.5,
     device: str = "cpu",
 ) -> None:
@@ -236,6 +236,9 @@ def run_pipeline(
     latent_size: int = 20,
     epochs: int = 50,
     batch_size: int = 64,
+    n_critics: int = 5,
+    lr_g: float = 1e-5,
+    lr_d: float = 1e-5,
     rec_error_func: t.Callable = point_wise_error,
     device: str = "cpu",
     anomaly_type: str = "point",
@@ -260,7 +263,15 @@ def run_pipeline(
 
     # build and train discriminator and generator
     model = MADGAN(signal_size=sw, latent_size=latent_size, n_features=n_features, device=device)
-    train(model, train_dl, epochs=epochs, device=device)
+    train(
+        model, 
+        train_dl, 
+        epochs=epochs,
+        n_critics=n_critics, 
+        lr_g=lr_g,
+        lr_d=lr_d,    
+        device=device,
+    )
     model.g.eval()
     model.d.eval()
 
@@ -283,6 +294,7 @@ def run_pipeline(
 
             precision, recall, f1 = evaluate_collective_anomalies(y_test_labels_intervals, y_test_errors_intervals)
 
+    print()
     print("Metrics")
     print("-------")
     print(f"Precision = {precision:.4f}")
@@ -304,7 +316,7 @@ if __name__ == "__main__":
 
     # min-max normalization to [-1, 1]
     ts_min = ts.min(axis=0)
-    ts_max = ts.max(axcleis=0)
+    ts_max = ts.max(axis=0)
     ts_normalized = 2 * (ts - ts_min) / (ts_max - ts_min) - 1
 
     run_pipeline(
@@ -314,5 +326,7 @@ if __name__ == "__main__":
         ss=1,
         epochs=10,
         batch_size=64,
-        device="cuda" if torch.cuda.is_available() else "cpu"
+        lr_g=1e-4,
+        lr_d=1e-4,
+        device="cuda" if torch.cuda.is_available() else "cpu",
     )

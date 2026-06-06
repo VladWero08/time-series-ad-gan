@@ -375,6 +375,7 @@ def run_pipeline(
 
             precision, recall, f1 = evaluate_collective_anomalies(y_test_labels_intervals, y_test_errors_intervals)
 
+    print()
     print("Metrics")
     print("-------")
     print(f"Precision = {precision:.4f}")
