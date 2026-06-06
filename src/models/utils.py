@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import typing as t
+import matplotlib.pyplot as plt
 
 from scipy.stats import gaussian_kde, zscore
 
@@ -399,11 +400,49 @@ def evaluate_collective_anomalies(y_true_intervals: torch.Tensor, y_predict_inte
     return precision, recall, f1    
 
 
+def intervals_to_points(y_intervals: t.List[t.List], n_labels: int) -> torch.Tensor:
+    point_labels = torch.zeros(n_labels)
+    for y_interval in y_intervals:
+        start, end = y_interval[0], y_interval[1]
+        point_labels[start:end] = 1
+    return point_labels
+
+
+def plot_performance(
+    X: torch.Tensor,
+    X_preds: torch.Tensor,
+    y: torch.Tensor,
+) -> None:
+    def format(x) -> np.ndarray:
+        if isinstance(x, torch.Tensor):
+            x = x.numpy()
+        if len(x.shape) > 1:
+            x = x.flatten()
+        return x
+
+    X = format(X)
+    X_preds = format(X_preds)
+    y = format(y)         
+    y_idx = y == 1
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(X, color="blue", label="Time-Series")
+    plt.plot(X_preds, color="orange", label="Prediction")
+    plt.scatter(np.where(y_idx)[0], X[y_idx], color="red", s=15, zorder=3, label="Anomaly")
+    plt.xlabel("Time Step")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()    
+
+
 if __name__ == "__main__":
     anomaly_scores = torch.zeros(200)
-    anomaly_scores[[1, 2, 3, 4]] = 0.90
-    anomaly_scores[[30, 31, 32, 34]] = 0.60
-    anomaly_scores[[90, 91, 92, 93]] = 0.55
-    anomaly_scores[[140, 141, 142, 143]] = 0.50
+    anomaly_scores[[1, 2, 3, 4]] = 1
+    anomaly_scores[[30, 31, 32, 34]] = 1
+    anomaly_scores[[90, 91, 92, 93]] = 1
+    anomaly_scores[[140, 141, 142, 143]] = 1
 
-    print(detect_contextual_anomalies(anomaly_scores))
+    intervals = get_anomaly_intervals(anomaly_scores)
+    print(intervals)
+    points = intervals_to_points(intervals, len(anomaly_scores))
+    print(points)
