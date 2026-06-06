@@ -12,6 +12,7 @@ from src.models.utils import gradient_penalty
 from src.models.utils import point_wise_error, area_wise_error, dtw_error, agg_gan_errors
 from src.models.utils import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
 from src.models.utils import evaluate_point_anomalies, evaluate_collective_anomalies
+from src.models.utils import agg_reconstruction_errors, intervals_to_points, plot_performance
 
 
 class GeneratorG(nn.Module):
@@ -252,6 +253,8 @@ def train(
             loss_gg_gan = -tadgan.dz(fake_z_data).mean()
             # compute forward cycle loss
             loss_forward_cycle = mse(real_x_data, reconstructed_x_data).mean()
+            loss_gg_total = loss_gg_gan + lambda_fc * loss_forward_cycle
+            loss_gg_total.backward()
 
             ##########################################
             # (4) Update F Network: maximize Dx(F(z))
@@ -260,10 +263,11 @@ def train(
             fake_x_data = tadgan.gf(real_z_data)
             # compute GAN loss for generator F
             loss_gf_gan = -tadgan.dx(fake_x_data).mean()
-            
+            loss_gf_gan.backward()
+
             # compute the total loss for the generators
-            loss_generators = loss_gg_gan + loss_gf_gan + lambda_fc * loss_forward_cycle
-            loss_generators.backward()
+            # loss_generators = loss_gg_gan + loss_gf_gan + lambda_fc * loss_forward_cycle
+            # loss_generators.backward()
 
             # backward pass for both optimizers
             optim_gg.step()
@@ -281,7 +285,7 @@ def train(
         loss_dz_epoch /= (len(train_dl) * n_critics) 
         print(f"Epoch {epoch+1:3d} | GG Loss: {loss_gg_epoch:.6f} | GF Loss: {loss_gf_epoch:.6f} | FC Loss: {loss_fc_epoch:.6f} | DX Loss: {loss_dx_epoch:.6f} | DZ Loss: {loss_dz_epoch:.6f}")
 
-
+import matplotlib.pyplot as plt
 def test(
     model: TadGAN,
     ds: SignalsReconstructDataset,
@@ -290,11 +294,12 @@ def test(
     rec_error_func: t.Callable = point_wise_error,
     alpha: float = 0.5,
     device: str = "cpu",
-) -> torch.Tensor:
+) -> t.Tuple[torch.Tensor]:
     
     with torch.no_grad():
         # X -> G(X) -> F(G(X))
         ds_X_rec = model.gf(model.gg(ds.X.to(device))).detach()
+        ds_X_rec_agg = agg_reconstruction_errors(ds_X_rec, sw=sw, ss=ss)
 
         # compute the reconstruction error (T, sw, n_features)
         rec_errors = rec_error_func(ds_X_rec, ds.X)
@@ -303,7 +308,7 @@ def test(
         # compute the final anomaly score
         anomaly_scores = agg_gan_errors(rec_errors, disc_scores, sw=sw, ss=ss, alpha=alpha)
 
-    return anomaly_scores
+    return ds_X_rec_agg, anomaly_scores
 
 
 def run_pipeline(
@@ -323,6 +328,7 @@ def run_pipeline(
     rec_error_func: t.Callable = point_wise_error,
     device: str = "cpu",
     anomaly_type: str = "point",
+    plot: bool = False,
 ) -> np.ndarray:
     T, n_features = X.shape
     train_end = int(T * train_ratio)
@@ -356,13 +362,13 @@ def run_pipeline(
     )
     model.gg.eval(); model.gf.eval(); model.dx.eval(); model.dz.eval()
 
-    test_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
+    X_test_preds, test_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
     test_anomaly_scores = test_anomaly_scores[cutoff:-cutoff]
 
     match anomaly_type:
         case "point":
             # compute the forecasting errors for the train set
-            train_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
+            _, train_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
             # compute the test labels based on the forecasting errors obtained in training
             y_test_labels = detect_point_anomalies(train_anomaly_scores, test_anomaly_scores)
 
@@ -372,6 +378,7 @@ def run_pipeline(
             y_test_labels_intervals = get_anomaly_intervals(y_test)
             # compute the test anomaly sequences from test forecast errors
             y_test_errors_intervals = detect_contextual_anomalies(test_anomaly_scores)
+            y_test_labels = intervals_to_points(y_test_errors_intervals, y_test.shape[0])
 
             precision, recall, f1 = evaluate_collective_anomalies(y_test_labels_intervals, y_test_errors_intervals)
 
@@ -381,6 +388,10 @@ def run_pipeline(
     print(f"Precision = {precision:.4f}")
     print(f"Recall = {recall:.4f}")
     print(f"F1 = {f1:.4f}")
+
+    if plot:
+        # for plotting, the test samples and their predictions need to be cutoff to match the predicted labels
+        plot_performance(X=X_test[cutoff:-cutoff], X_preds=X_test_preds[cutoff:-cutoff], y=y_test_labels)
 
 
 if __name__ == "__main__":
@@ -407,10 +418,11 @@ if __name__ == "__main__":
         ss=1,
         epochs=10,
         batch_size=64,
-        n_critics=10,
+        n_critics=5,
         lr_gg=1e-4,
         lr_gf=1e-4,
         lr_dx=1e-4,
         lr_dz=1e-4,
         device="cuda" if torch.cuda.is_available() else "cpu",
+        plot=True,
     )

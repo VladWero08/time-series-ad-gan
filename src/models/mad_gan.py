@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.optim as optim
 import typing as t
 import numpy as np
-import matplotlib.pyplot as plt
 
 from torch.utils.data import DataLoader
 
@@ -12,6 +11,7 @@ from src.models.utils import gradient_penalty
 from src.models.utils import point_wise_error, area_wise_error, dtw_error, agg_gan_errors
 from src.models.utils import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
 from src.models.utils import evaluate_point_anomalies, evaluate_collective_anomalies
+from src.models.utils import agg_reconstruction_errors, intervals_to_points, plot_performance
 
 
 class Generator(nn.Module):
@@ -204,7 +204,7 @@ def test(
     rec_error_func: t.Callable = point_wise_error, 
     alpha: float = 0.5,
     device: str = "cpu",
-) -> torch.Tensor:
+) -> t.Tuple[torch.Tensor]:
     # find the best representation of each signal for the given dataset
     ds_best_z = find_best_latent(
         ds.X, 
@@ -216,6 +216,7 @@ def test(
     
     with torch.no_grad():
         ds_X_rec = model.g(ds_best_z).detach()
+        ds_X_rec_agg = agg_reconstruction_errors(ds_X_rec, sw=sw, ss=ss)
 
         # compute the reconstruction error (T, sw, n_features)
         rec_errors = rec_error_func(ds_X_rec, ds.X)
@@ -223,8 +224,8 @@ def test(
         disc_scores = model.d(ds_X_rec).detach()
         # compute the final anomaly score
         anomaly_scores = agg_gan_errors(rec_errors, disc_scores, sw=sw, ss=ss, alpha=alpha)
-        
-    return anomaly_scores
+
+    return ds_X_rec_agg, anomaly_scores
 
 
 def run_pipeline(
@@ -242,6 +243,7 @@ def run_pipeline(
     rec_error_func: t.Callable = point_wise_error,
     device: str = "cpu",
     anomaly_type: str = "point",
+    plot: bool = False,
 ) -> np.ndarray:
     T, n_features = X.shape
     train_end = int(T * train_ratio)
@@ -275,13 +277,13 @@ def run_pipeline(
     model.g.eval()
     model.d.eval()
 
-    test_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
+    X_test_preds, test_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
     test_anomaly_scores = test_anomaly_scores[cutoff:-cutoff]
 
     match anomaly_type:
         case "point":
             # compute the forecasting errors for the train set
-            train_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
+            _, train_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
             # compute the test labels based on the forecasting errors obtained in training
             y_test_labels = detect_point_anomalies(train_anomaly_scores, test_anomaly_scores)
 
@@ -291,6 +293,7 @@ def run_pipeline(
             y_test_labels_intervals = get_anomaly_intervals(y_test)
             # compute the test anomaly sequences from test forecast errors
             y_test_errors_intervals = detect_contextual_anomalies(test_anomaly_scores)
+            y_test_labels = intervals_to_points(y_test_errors_intervals, y_test.shape[0])
 
             precision, recall, f1 = evaluate_collective_anomalies(y_test_labels_intervals, y_test_errors_intervals)
 
@@ -300,6 +303,10 @@ def run_pipeline(
     print(f"Precision = {precision:.4f}")
     print(f"Recall = {recall:.4f}")
     print(f"F1 = {f1:.4f}")
+
+    if plot:
+        # for plotting, the test samples and their predictions need to be cutoff to match the predicted labels
+        plot_performance(X=X_test[cutoff:-cutoff], X_preds=X_test_preds[cutoff:-cutoff], y=y_test_labels)
 
 
 if __name__ == "__main__":
@@ -329,4 +336,5 @@ if __name__ == "__main__":
         lr_g=1e-4,
         lr_d=1e-4,
         device="cuda" if torch.cuda.is_available() else "cpu",
+        plot=True,
     )

@@ -1,12 +1,13 @@
 import numpy as np
 import torch
 import torch.nn as nn
-import matplotlib.pyplot as plt
+import typing as t
 
 from torch.utils.data import DataLoader
 
 from src.models.utils import point_wise_error, get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
 from src.models.utils import evaluate_point_anomalies, evaluate_collective_anomalies
+from src.models.utils import intervals_to_points, plot_performance
 from src.models.signals import SignalsForecastDataset
 
 
@@ -96,12 +97,13 @@ def test(
     model: TSAD_LSTM,
     ds: SignalsForecastDataset,
     device: str = "cpu",
-) -> torch.Tensor:
+) -> t.Tuple[torch.Tensor]:
     model.eval()
     with torch.no_grad():
         ds_preds = model(ds.X.to(device)).cpu()
         ds_errors = point_wise_error(ds_preds, ds.y)
-    return ds_errors
+
+    return ds_preds, ds_errors
 
 
 def run_pipeline(
@@ -119,6 +121,7 @@ def run_pipeline(
     patience: int = 5,
     device: str = "cpu",
     anomaly_type: str = "point",
+    plot: bool = False,
 ) -> None:
     """
     Full anomaly detection pipeline for a multivariate time series.
@@ -170,12 +173,12 @@ def run_pipeline(
     )
 
     # compute the forecasting errors for the test set
-    y_test_errors = test(model, test_ds, device)
+    X_test_preds, y_test_errors = test(model, test_ds, device)
 
     match anomaly_type:
         case "point":
             # compute the forecasting errors for the train set
-            y_train_errors = test(model, train_ds, device)
+            _, y_train_errors = test(model, train_ds, device)
             # compute the test labels based on the forecasting errors obtained in training
             y_test_labels = detect_point_anomalies(y_train_errors, y_test_errors)
 
@@ -185,7 +188,8 @@ def run_pipeline(
             y_test_labels_intervals = get_anomaly_intervals(y_test) 
             # compute the test anomaly sequences from test forecast errors
             y_test_errors_intervals = detect_contextual_anomalies(y_test_errors)
-            
+            y_test_labels = intervals_to_points(y_test_errors_intervals, y_test.shape[0])
+
             precision, recall, f1 = evaluate_collective_anomalies(y_test_labels_intervals, y_test_errors_intervals)
 
     print()
@@ -194,6 +198,10 @@ def run_pipeline(
     print(f"Precision = {precision:.4f}")
     print(f"Recall = {recall:.4f}")
     print(f"F1 = {f1:.4f}")
+
+    if plot:
+        # for plotting, first sw test points need to be removed no forecast was made for them
+        plot_performance(X=X_test[sw:], X_preds=X_test_preds, y=y_test_labels)
 
 
 if __name__ == "__main__":
@@ -204,7 +212,7 @@ if __name__ == "__main__":
     y = np.zeros(T)
 
     # inject spike anomalies
-    anomaly_idx = [1790, 1800, 1930]
+    anomaly_idx = [1790, 1850, 1930]
     ts[anomaly_idx] += 15.0
     y[anomaly_idx] = 1
 
@@ -222,5 +230,6 @@ if __name__ == "__main__":
         ss=1,
         epochs=20,
         batch_size=64,
-        device="cuda" if torch.cuda.is_available() else "cpu"
+        device="cuda" if torch.cuda.is_available() else "cpu",
+        plot=True,
     )
