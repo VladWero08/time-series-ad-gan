@@ -88,16 +88,16 @@ def agg_reconstruction_errors(reconstruction_errors: torch.Tensor, sw: int, ss: 
 
 def agg_gan_errors(
     reconstruction_errors: torch.Tensor,
-    discriminant_errors: torch.Tensor,
+    discriminator_errors: torch.Tensor,
     sw: int,
     ss: int,
     alpha: float = 0.5,
 ) -> torch.Tensor:
-    N = discriminant_errors.shape[0]
+    N = discriminator_errors.shape[0]
     T = (N - 1) * ss + sw
 
-    # convert to numpy and invert the discriminant scores
-    inverted_discriminant_errors = -1 * np.array(discriminant_errors).flatten()
+    # convert to numpy and invert the discriminator scores
+    inverted_discriminator_errors = -1 * np.array(discriminator_errors).flatten()
     reconstruction_errors = reconstruction_errors.numpy()
 
     # lists where the errors will be merged together from multiple windows
@@ -113,20 +113,20 @@ def agg_gan_errors(
         median_re = np.median(errors_at_t)
         agg_re.append(median_re)
         
-        # kde of discriminant scores
-        discriminants_at_t = [inverted_discriminant_errors[k] for k in range(k_min, k_max + 1)]
+        # kde of discriminator scores
+        discriminators_at_t = [inverted_discriminator_errors[k] for k in range(k_min, k_max + 1)]
         
-        if len(discriminants_at_t) > 1 and np.var(discriminants_at_t) > 1e-8:
-            # fir kernel density estimation over the overlapping window discriminant scores
-            kde = gaussian_kde(discriminants_at_t)
+        if len(discriminators_at_t) > 1 and np.var(discriminators_at_t) > 1e-8:
+            # fir kernel density estimation over the overlapping window discriminator scores
+            kde = gaussian_kde(discriminators_at_t)
 
             # sample the maximum from the distribution
-            space = np.linspace(min(discriminants_at_t), max(discriminants_at_t), 100)
+            space = np.linspace(min(discriminators_at_t), max(discriminators_at_t), 100)
             kde_max_score = space[np.argmax(kde(space))]
             agg_dx.append(kde_max_score)
         else:
             # use the mean if KDE cannot be applied
-            agg_dx.append(np.mean(discriminants_at_t))
+            agg_dx.append(np.mean(discriminators_at_t))
 
     Z_re = zscore(np.array(agg_re))
     Z_dx = zscore(np.array(agg_dx))

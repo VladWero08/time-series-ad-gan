@@ -45,7 +45,7 @@ def train(
     val_ds: SignalsForecastDataset,
     optimizer,
     criterion,
-    epochs: int = 50,
+    epochs: int = 35,
     patience: int = 5,
     device: str = "cpu"
 ) -> TSAD_LSTM:

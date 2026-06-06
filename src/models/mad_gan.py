@@ -201,10 +201,11 @@ def test(
     ds: SignalsReconstructDataset,
     sw: int = 100,
     ss: int = 1,
-    error_func: t.Callable = point_wise_error, 
+    rec_error_func: t.Callable = point_wise_error, 
     alpha: float = 0.5,
     device: str = "cpu",
 ) -> torch.Tensor:
+    # find the best representation of each signal for the given dataset
     ds_best_z = find_best_latent(
         ds.X, 
         model.g, 
@@ -217,11 +218,11 @@ def test(
         ds_X_rec = model.g(ds_best_z).detach()
 
         # compute the reconstruction error (T, sw, n_features)
-        rec_errors = error_func(ds_X_rec, ds.X)
-        # compute the discriminator error (T, 1)
-        disc_errors = model.d(ds_X_rec).detach()
+        rec_errors = rec_error_func(ds_X_rec, ds.X)
+        # compute the discriminator score (T, 1)
+        disc_scores = model.d(ds_X_rec).detach()
         # compute the final anomaly score
-        anomaly_scores = agg_gan_errors(rec_errors, disc_errors, sw=sw, ss=ss, alpha=alpha)
+        anomaly_scores = agg_gan_errors(rec_errors, disc_scores, sw=sw, ss=ss, alpha=alpha)
         
     return anomaly_scores
 
@@ -235,6 +236,7 @@ def run_pipeline(
     latent_size: int = 20,
     epochs: int = 50,
     batch_size: int = 64,
+    rec_error_func: t.Callable = point_wise_error,
     device: str = "cpu",
     anomaly_type: str = "point",
 ) -> np.ndarray:
@@ -257,18 +259,18 @@ def run_pipeline(
     test_ds  = SignalsReconstructDataset(X_test, sw=sw, ss=ss)
 
     # build and train discriminator and generator
-    model = MADGAN(sw, latent_size, n_features, device=device)
+    model = MADGAN(signal_size=sw, latent_size=latent_size, n_features=n_features, device=device)
     train(model, train_dl, epochs=epochs, device=device)
     model.g.eval()
     model.d.eval()
 
-    test_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, error_func=point_wise_error, device=device)
+    test_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
     test_anomaly_scores = test_anomaly_scores[cutoff:-cutoff]
 
     match anomaly_type:
         case "point":
             # compute the forecasting errors for the train set
-            train_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, error_func=point_wise_error, device=device)
+            train_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
             # compute the test labels based on the forecasting errors obtained in training
             y_test_labels = detect_point_anomalies(train_anomaly_scores, test_anomaly_scores)
 
@@ -302,7 +304,7 @@ if __name__ == "__main__":
 
     # min-max normalization to [-1, 1]
     ts_min = ts.min(axis=0)
-    ts_max = ts.max(axis=0)
+    ts_max = ts.max(axcleis=0)
     ts_normalized = 2 * (ts - ts_min) / (ts_max - ts_min) - 1
 
     run_pipeline(
