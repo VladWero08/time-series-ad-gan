@@ -39,13 +39,11 @@ class TSAD_LSTM_AE(nn.Module):
         )
 
         self.fc = nn.Linear(hidden_size, input_size)
-        self.activation = nn.Tanh()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         encoder_out, (hn, cn) = self.encoder(x)
         decoder_out, (_, _) = self.decoder(encoder_out, (hn, cn))
         out = self.fc(decoder_out)
-        out = self.activation(out)
 
         return out
 
@@ -57,7 +55,7 @@ def train(
     optimizer,
     criterion,
     epochs: int = 50,
-    patience: int = 5,
+    patience: int = 10,
     device: str = "cpu"
 ) -> TSAD_LSTM_AE:
     patience_counter = 0
@@ -134,7 +132,7 @@ def run_pipeline(
     epochs: int = 50,
     batch_size: int = 64,
     lr: float = 1e-4,
-    patience: int = 5,
+    patience: int = 10,
     device: str = "cpu",
     anomaly_type: str = "point",
     plot: bool = False,
@@ -245,7 +243,7 @@ if __name__ == "__main__":
         y,
         train_ratio=0.70,
         val_ratio=0.10,
-        sw=250,
+        sw=100,
         ss=1,
         epochs=20,
         batch_size=64,

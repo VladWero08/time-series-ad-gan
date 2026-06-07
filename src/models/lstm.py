@@ -29,13 +29,11 @@ class TSAD_LSTM(nn.Module):
             dropout=dropout if num_layers > 1 else 0.0
         )
         self.fc = nn.Linear(hidden_size, input_size)
-        self.activation = nn.Tanh()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out, (hn, cn) = self.lstm(x)
         out = out[:, -1, :]
         out = self.fc(out)
-        out = self.activation(out)
 
         return out
 
@@ -47,7 +45,7 @@ def train(
     optimizer,
     criterion,
     epochs: int = 35,
-    patience: int = 5,
+    patience: int = 10,
     device: str = "cpu"
 ) -> TSAD_LSTM:
     patience_counter = 0
@@ -118,7 +116,7 @@ def run_pipeline(
     epochs: int = 35,
     batch_size: int = 64,
     lr: float = 1e-4,
-    patience: int = 5,
+    patience: int = 10,
     device: str = "cpu",
     anomaly_type: str = "point",
     plot: bool = False,
@@ -157,7 +155,7 @@ def run_pipeline(
     test_ds  = SignalsForecastDataset(X_test, sw, ss)
 
     # build and train the LSTM for this channel
-    model = TSAD_LSTM(input_size=n_features, hidden_size=hidden_size, num_layers=num_layers)
+    model = TSAD_LSTM(input_size=n_features, hidden_size=hidden_size, num_layers=num_layers).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
     

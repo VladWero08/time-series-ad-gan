@@ -34,15 +34,12 @@ class Generator(nn.Module):
             in_features=hidden_size*2,
             out_features=n_features,   
         )
-        self.activation = nn.Tanh()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # (batch, signal_size, latent_size)
         out, (hn, cn) = self.lstm(x)
         # (batch, signal_size, hidden_size * 2)
         out = self.fc(out)
-        # (batch, signal_size, n_features)
-        out = self.activation(out)
         # (batch, signal_size, n_features)
         return out
 
