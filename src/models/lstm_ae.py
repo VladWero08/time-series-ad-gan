@@ -5,6 +5,7 @@ import typing as t
 
 from torch.utils.data import DataLoader
 
+from src.models.utils import normalizaion
 from src.models.utils import point_wise_error, agg_reconstruction_errors
 from src.models.utils import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
 from src.models.utils import evaluate_point_anomalies, evaluate_collective_anomalies
@@ -158,9 +159,9 @@ def run_pipeline(
     # a cutoff will be applied to both ends of the signal
     cutoff = sw // 2
 
-    X_train, y_train    = X[:train_end], y[:train_end][cutoff:-cutoff]
-    X_val, y_val        = X[train_end:val_end], y[train_end:val_end][cutoff:-cutoff]
-    X_test, y_test      = X[val_end:], y[val_end:][cutoff:-cutoff]      
+    X_train, y_train    = normalizaion(X[:train_end]), y[:train_end][cutoff:-cutoff]
+    X_val, y_val        = normalizaion(X[train_end:val_end]), y[train_end:val_end][cutoff:-cutoff]
+    X_test, y_test      = normalizaion(X[val_end:]), y[val_end:][cutoff:-cutoff]      
 
     print(f"Series shape : {X.shape}")
     print(f"Train        : timesteps 0 -> {train_end}  ({train_end} steps)")

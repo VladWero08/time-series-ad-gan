@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 
 from src.models.signals import SignalsReconstructDataset 
+
+from src.models.utils import normalizaion
 from src.models.utils import gradient_penalty
 from src.models.utils import point_wise_error, area_wise_error, dtw_error, agg_gan_errors
 from src.models.utils import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
@@ -333,8 +335,8 @@ def run_pipeline(
     # a cutoff will be applied to both ends of the signal
     cutoff = sw // 2
 
-    X_train, y_train    = X[:train_end], y[:train_end][cutoff:-cutoff]
-    X_test, y_test      = X[train_end:], y[train_end:][cutoff:-cutoff]      
+    X_train, y_train    = normalizaion(X[:train_end]), y[:train_end][cutoff:-cutoff]
+    X_test, y_test      = normalizaion(X[train_end:]), y[train_end:][cutoff:-cutoff]      
 
     print(f"Series shape : {X.shape}")
     print(f"Train        : timesteps 0 -> {train_end}  ({train_end} steps)")

@@ -5,6 +5,15 @@ import matplotlib.pyplot as plt
 
 from scipy.stats import gaussian_kde, zscore
 
+
+def normalizaion(X: np.ndarray):
+    # min-max normalization to [-1, 1]
+    X_min = X.min(axis=0)
+    X_max = X.max(axis=0)
+    X_normalized = 2 * (X - X_min) / (X_max - X_min) - 1
+    return X_normalized
+
+
 def point_wise_error(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
     return torch.abs(y_pred - y_true)
 
