@@ -196,19 +196,19 @@ def run_pipeline(
     match anomaly_type:
         case "point":
             # compute the forecasting errors for the train set
-            _, y_train_errors = test(model, train_ds, sw=sw, ss=ss, device=device)
+            _, y_train_errors = test(model, train_ds, device)
             # compute the test labels based on the forecasting errors obtained in training
-            y_test_labels = detect_point_anomalies(y_train_errors, y_test_errors)
+            y_test_hat = detect_point_anomalies(y_train_errors, y_test_errors)
 
-            precision, recall, f1 = evaluate_point_anomalies(y_true=y_test, y_predict=y_test_labels)
+            precision, recall, f1 = evaluate_point_anomalies(y_true=y_test, y_predict=y_test_hat)
         case "contextual":
             # compute the test anomaly sequences from test labels 
-            y_test_labels_intervals = get_anomaly_intervals(y_test)
+            y_test_intervals = get_anomaly_intervals(y_test) 
             # compute the test anomaly sequences from test forecast errors
-            y_test_errors_intervals = detect_contextual_anomalies(y_test_errors)
-            y_test_labels = intervals_to_points(y_test_errors_intervals, y_test.shape[0])
+            y_test_hat_intervals = detect_contextual_anomalies(y_test_errors)
+            y_test_hat = intervals_to_points(y_test_hat_intervals, y_test.shape[0])
 
-            precision, recall, f1 = evaluate_collective_anomalies(y_test_labels_intervals, y_test_errors_intervals)
+            precision, recall, f1 = evaluate_collective_anomalies(y_test_intervals, y_test_hat_intervals)
 
     print()
     print("Metrics")
@@ -219,7 +219,7 @@ def run_pipeline(
 
     if plot:
         # for plotting, the test samples and their predictions need to be cutoff to match the predicted labels
-        plot_performance(X=X_test[cutoff:-cutoff], X_preds=X_test_preds[cutoff:-cutoff], y=y_test_labels)
+        plot_performance(X=X_test[cutoff:-cutoff], X_preds=X_test_preds[cutoff:-cutoff], y=y_test_hat)
 
 if __name__ == "__main__":
     np.random.seed(999)

@@ -359,25 +359,25 @@ def run_pipeline(
     )
     model.gg.eval(); model.gf.eval(); model.dx.eval(); model.dz.eval()
 
-    X_test_preds, test_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
-    test_anomaly_scores = test_anomaly_scores[cutoff:-cutoff]
+    X_test_preds, y_test_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
+    y_test_anomaly_scores = y_test_anomaly_scores[cutoff:-cutoff]
 
     match anomaly_type:
         case "point":
             # compute the forecasting errors for the train set
-            _, train_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
+            _, y_train_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
             # compute the test labels based on the forecasting errors obtained in training
-            y_test_labels = detect_point_anomalies(train_anomaly_scores, test_anomaly_scores)
+            y_test_hat = detect_point_anomalies(y_train_anomaly_scores, y_test_anomaly_scores)
 
-            precision, recall, f1 = evaluate_point_anomalies(y_true=y_test, y_predict=y_test_labels)
+            precision, recall, f1 = evaluate_point_anomalies(y_true=y_test, y_predict=y_test_hat)
         case "contextual":
             # compute the test anomaly sequences from test labels 
-            y_test_labels_intervals = get_anomaly_intervals(y_test)
+            y_test_intervals = get_anomaly_intervals(y_test)
             # compute the test anomaly sequences from test forecast errors
-            y_test_errors_intervals = detect_contextual_anomalies(test_anomaly_scores)
-            y_test_labels = intervals_to_points(y_test_errors_intervals, y_test.shape[0])
+            y_test_hat_intervals = detect_contextual_anomalies(y_test_anomaly_scores)
+            y_test_labels = intervals_to_points(y_test_hat_intervals, y_test.shape[0])
 
-            precision, recall, f1 = evaluate_collective_anomalies(y_test_labels_intervals, y_test_errors_intervals)
+            precision, recall, f1 = evaluate_collective_anomalies(y_test_intervals, y_test_hat_intervals)
 
     print()
     print("Metrics")
