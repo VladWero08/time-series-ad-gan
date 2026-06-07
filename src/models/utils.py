@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde, zscore
 
 
-def normalizaion(X: np.ndarray):
+def normalization(X: np.ndarray):
     # min-max normalization to [-1, 1]
     X_min = X.min(axis=0)
     X_max = X.max(axis=0)

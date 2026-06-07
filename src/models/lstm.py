@@ -5,7 +5,7 @@ import typing as t
 
 from torch.utils.data import DataLoader
 
-from src.models.utils import normalizaion
+from src.models.utils import normalization
 from src.models.utils import point_wise_error, get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
 from src.models.utils import evaluate_point_anomalies, evaluate_collective_anomalies
 from src.models.utils import intervals_to_points, plot_performance
@@ -140,9 +140,9 @@ def run_pipeline(
     train_end = int(T * train_ratio)
     val_end   = int(T * (train_ratio + val_ratio))
 
-    X_train, y_train    = normalizaion(X[:train_end]), y[:train_end][sw:]
-    X_val, y_val        = normalizaion(X[train_end:val_end]), y[train_end:val_end][sw:]
-    X_test, y_test      = normalizaion(X[val_end:]), y[val_end:][sw:]  
+    X_train, y_train    = normalization(X[:train_end]), y[:train_end][sw:]
+    X_val, y_val        = normalization(X[train_end:val_end]), y[train_end:val_end][sw:]
+    X_test, y_test      = normalization(X[val_end:]), y[val_end:][sw:]  
 
     print(f"Series shape : {X.shape}")
     print(f"Train        : timesteps 0 -> {train_end}  ({train_end} steps)")

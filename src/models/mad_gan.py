@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 
 from src.models.signals import SignalsReconstructDataset 
 
-from src.models.utils import normalizaion
+from src.models.utils import normalization
 from src.models.utils import gradient_penalty
 from src.models.utils import point_wise_error, area_wise_error, dtw_error, agg_gan_errors
 from src.models.utils import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
