@@ -287,7 +287,7 @@ def get_anomaly_intervals(
     if prune is True:
         # extract the maximum anomaly score for each interval
         intervals_max = [max(anomaly_scores[start:end+1]).item() for start, end in intervals]
-        # sort the intervals and intervald maximums 
+        # sort the intervals and intervald maximums
         idx = np.argsort(intervals_max)[::-1]
 
         intervals = np.array(intervals)[idx]
@@ -304,6 +304,24 @@ def get_anomaly_intervals(
 
     intervals = intervals.tolist()
     return intervals
+
+
+def merge_anomaly_intervals(intervals: t.List[t.Tuple[int, int]]) -> t.List[t.Tuple[int, int]]:
+    if not intervals:
+        return []
+
+    sorted_intervals = sorted(intervals, key=lambda x: x[0])
+    merged = [sorted_intervals[0]]
+
+    for start, end in sorted_intervals[1:]:
+        prev_start, prev_end = merged[-1]
+        # overlapping or consecutive
+        if start <= prev_end + 1:  
+            merged[-1] = (prev_start, max(prev_end, end))
+        else:
+            merged.append((start, end))
+
+    return merged
 
 
 def detect_contextual_anomalies(
@@ -324,19 +342,23 @@ def detect_contextual_anomalies(
     T = anomaly_scores.shape[0]
     threshold_sw = T // 3
     threshold_ss = T // (3 * 10)     
-    anomaly_labels = [0 for _ in range(T)]
+    anomaly_intervals = []
 
     for i in range(0, T - threshold_sw + 1, threshold_ss):
         window = anomaly_scores[i:i+threshold_sw]
         window_mean = torch.mean(window)
         window_std = torch.std(window) + 1e-8
+        # use time-series size as labels size for easier index manipulation
+        window_anomaly_labels = torch.zeros((T,))
 
         for j, anomaly_score in enumerate(window):
             is_anomaly = int((anomaly_score > (window_mean + max_std * window_std)).item())
-            anomaly_labels[i + j] |= is_anomaly
+            window_anomaly_labels[i + j] = is_anomaly
 
-    anomaly_labels = torch.tensor(anomaly_labels)
-    anomaly_intervals = get_anomaly_intervals(anomaly_labels, anomaly_scores, prune=True)
+        window_anomaly_intervals = get_anomaly_intervals(window_anomaly_labels, anomaly_scores, prune=True)
+        anomaly_intervals.extend(window_anomaly_intervals)
+
+    anomaly_intervals = merge_anomaly_intervals(anomaly_intervals)
 
     return anomaly_intervals
 
