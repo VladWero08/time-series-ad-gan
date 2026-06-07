@@ -26,25 +26,49 @@ def area_wise_error(y_pred: torch.Tensor, y_true: torch.Tensor, l: int = 3) -> t
     return st
 
 
-def dtw_error(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
-    n, m = y_pred.shape[0], y_true.shape[0]
+def dtw_error(y_pred: torch.Tensor, y_true: torch.Tensor, window: int = 10) -> torch.Tensor:
+    def dtw_distance(ts1: torch.Tensor, ts2: torch.Tensor) -> torch.Tensor:
+        n, m = ts1.shape[0], ts2.shape[0]
+        
+        # initialize the dp matrix for dtw
+        dtw_matrix = torch.full((n + 1, m + 1), float("inf"))
+        dtw_matrix[0, 0] = 0
+
+        for i in range(1, n + 1):
+            for j in range(1, m + 1):
+                # reconstruction error of the current point
+                diff = abs(ts1[i - 1] - ts2[j - 1])
+                # lowest error from previous time-series data
+                min_ = torch.min(torch.stack([
+                    dtw_matrix[i - 1, j], 
+                    dtw_matrix[i, j - 1], 
+                    dtw_matrix[i - 1, j - 1]
+                ]))
+                dtw_matrix[i, j] = diff + min_
+
+        return dtw_matrix[n, m]
+
+    length_dtw = (window // 2) * 2 + 1
+    half_len = length_dtw // 2
+    T = y_true.shape[0]
+
+    # pad inputs with zeros    
+    pad_shape = (half_len, half_len)
+    y_true_pad = torch.nn.functional.pad(y_true, pad_shape, mode='constant', value=0.0)
+    y_pred_pad = torch.nn.functional.pad(y_pred, pad_shape, mode='constant', value=0.0)
     
-    # initialize the dp matrix for dtw
-    dtw_matrix = torch.zeros((n + 1, m + 1))
-    for i in range(n + 1):
-        for j in range(m + 1):
-            dtw_matrix[i, j] = float("inf")
-    dtw_matrix[0, 0] = 0
-
-    for i in range(n + 1):
-        for j in range(m + 1):
-            # reconstruction error of the current point
-            diff = abs(y_pred[i] - y_true[j])
-            # lowest error from previous time-series data
-            min_ = torch.min([dtw_matrix[i - 1, j], dtw_matrix[i, j - 1], dtw_matrix[i - 1, j - 1]])
-            dtw_matrix[i, j] = diff + min_
-
-    return dtw_matrix[n, m]
+    errors = torch.zeros(T, device=y_true.device)
+    
+    # calculate local DTW within the window step-by-step
+    for i in range(T - length_dtw + 1):
+        true_window = y_true_pad[i : i + length_dtw]
+        pred_window = y_pred_pad[i : i + length_dtw]
+        
+        # center point index 
+        target_idx = i + half_len
+        errors[target_idx] = dtw_distance(true_window, pred_window)
+        
+    return errors
 
 
 def agg_reconstruction_errors(reconstruction_errors: torch.Tensor, sw: int, ss: int) -> torch.Tensor:
@@ -436,6 +460,8 @@ def plot_performance(
 
 
 if __name__ == "__main__":
+    print("Testing Anomaly Intervals Computation")
+    print("-------------------------------------")
     anomaly_scores = torch.zeros(200)
     anomaly_scores[[1, 2, 3, 4]] = 1
     anomaly_scores[[30, 31, 32, 34]] = 1
@@ -446,3 +472,16 @@ if __name__ == "__main__":
     print(intervals)
     points = intervals_to_points(intervals, len(anomaly_scores))
     print(points)
+
+    print()
+    print("Testing Error Functions")
+    print("-----------------------")
+
+    ts1 = torch.tensor([1.0, 1.0, 2.0, 5.0, 2.0, 1.0, 1.0])
+    ts2 = torch.tensor([1.0, 1.0, 1.0, 1.0, 2.0, 5.0, 2.0])
+
+    print(f"Tensor 1: {ts1}")
+    print(f"Tensor 2: {ts2}")
+    print(f"Point Difference: {point_wise_error(ts1, ts2)}")
+    print(f"Area Difference: {area_wise_error(ts1, ts2)}")
+    print(f"DTW Difference: {dtw_error(ts1, ts2, window=3)}")
