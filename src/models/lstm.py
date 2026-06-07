@@ -47,6 +47,7 @@ def train(
     criterion,
     epochs: int = 35,
     patience: int = 10,
+    min_delta: float = 3e-4,
     device: str = "cpu"
 ) -> TSAD_LSTM:
     patience_counter = 0
@@ -78,7 +79,7 @@ def train(
         print(f"Epoch {epoch+1:3d} | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f}")
 
         # early stopping
-        if val_loss < best_val_loss:
+        if val_loss < best_val_loss - min_delta:
             best_val_loss = val_loss
             best_weights = {k: v.clone() for k, v in model.state_dict().items()}
             patience_counter = 0
