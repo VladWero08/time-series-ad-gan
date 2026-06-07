@@ -27,6 +27,9 @@ def area_wise_error(y_pred: torch.Tensor, y_true: torch.Tensor, l: int = 3) -> t
 
 
 def dtw_error(y_pred: torch.Tensor, y_true: torch.Tensor, window: int = 10) -> torch.Tensor:
+    """
+    Reference: https://github.com/sintel-dev/Orion/blob/master/orion/primitives/timeseries_errors.py
+    """
     def dtw_distance(ts1: torch.Tensor, ts2: torch.Tensor) -> torch.Tensor:
         n, m = ts1.shape[0], ts2.shape[0]
         
