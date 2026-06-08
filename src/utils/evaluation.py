@@ -91,8 +91,20 @@ def evaluate_collective_anomalies(y_intervals: torch.Tensor, y_hat_intervals: to
 def plot_performance(
     X: torch.Tensor,
     X_preds: torch.Tensor,
-    y: torch.Tensor,
+    y_hat: torch.Tensor,
 ) -> None:
+    """
+    Given a time-series `X` and its prediction `X_preds`, it plots both time-series, alongisde the predicted labels `y_hat`, to visualize the prediction error. 
+
+    Paramters:
+    ----------
+    X: torch.Tensor
+        Original time-series of shape `(T, 1)`.
+    X_preds: torch.Tensor
+        Predicted time-series of shape `(T, 1)`.
+    y: torch.Tensor
+        Predicted anomaly labels for the time-series `X`.
+    """
     def format(x) -> np.ndarray:
         if isinstance(x, torch.Tensor):
             x = x.numpy()
@@ -102,13 +114,13 @@ def plot_performance(
 
     X = format(X)
     X_preds = format(X_preds)
-    y = format(y)         
-    y_idx = y == 1
+    y_hat = format(y_hat)         
+    y_hat_idx = y_hat == 1
 
     plt.figure(figsize=(10, 5))
     plt.plot(X, color="blue", label="Time-Series")
     plt.plot(X_preds, color="orange", label="Prediction")
-    plt.scatter(np.where(y_idx)[0], X[y_idx], color="red", s=15, zorder=3, label="Anomaly")
+    plt.scatter(np.where(y_hat_idx)[0], X[y_hat_idx], color="red", s=15, zorder=3, label="Anomaly")
     plt.xlabel("Time Step")
     plt.legend()
     plt.tight_layout()

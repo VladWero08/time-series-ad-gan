@@ -3,19 +3,19 @@ import numpy as np
 from scipy.stats import gaussian_kde, zscore
 
 
-def point_wise_error(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
-    return torch.abs(y_pred - y_true)
+def point_wise_error(X_true: torch.Tensor, X_pred: torch.Tensor) -> torch.Tensor:
+    return torch.abs(X_true - X_pred)
 
 
-def area_wise_error(y_pred: torch.Tensor, y_true: torch.Tensor, l: int = 3) -> torch.Tensor:    
+def area_wise_error(X_true: torch.Tensor, X_pred: torch.Tensor, l: int = 3) -> torch.Tensor:    
     st = []
-    n = y_pred.shape[0]
+    N = X_true.shape[0]
 
-    for i in range(n):
+    for i in range(N):
         min_idx = max(0, i - l)
-        max_idx = min(n, i + l + 1)
+        max_idx = min(N, i + l + 1)
 
-        abs_diff = torch.abs(y_pred[min_idx:max_idx] - y_true[min_idx:max_idx]).float()
+        abs_diff = torch.abs(X_true[min_idx:max_idx] - X_pred[min_idx:max_idx]).float()
         mean_abs_diff = abs_diff.mean(dim=0)
 
         st.append(mean_abs_diff)
@@ -24,7 +24,7 @@ def area_wise_error(y_pred: torch.Tensor, y_true: torch.Tensor, l: int = 3) -> t
     return st
 
 
-def dtw_error(y_pred: torch.Tensor, y_true: torch.Tensor, window: int = 10) -> torch.Tensor:
+def dtw_error(X_true: torch.Tensor, X_pred: torch.Tensor, window: int = 10) -> torch.Tensor:
     """
     Reference: https://github.com/sintel-dev/Orion/blob/master/orion/primitives/timeseries_errors.py
     """
@@ -51,19 +51,19 @@ def dtw_error(y_pred: torch.Tensor, y_true: torch.Tensor, window: int = 10) -> t
 
     length_dtw = (window // 2) * 2 + 1
     half_len = length_dtw // 2
-    T = y_true.shape[0]
+    T = X_true.shape[0]
 
     # pad inputs with zeros    
     pad_shape = (half_len, half_len)
-    y_true_pad = torch.nn.functional.pad(y_true, pad_shape, mode='constant', value=0.0)
-    y_pred_pad = torch.nn.functional.pad(y_pred, pad_shape, mode='constant', value=0.0)
+    X_true_pad = torch.nn.functional.pad(X_true, pad_shape, mode='constant', value=0.0)
+    X_pred_pad = torch.nn.functional.pad(X_pred, pad_shape, mode='constant', value=0.0)
     
-    st = torch.zeros(T, device=y_true.device)
+    st = torch.zeros(T, device=X_true.device)
     
     # calculate local DTW within the window step-by-step
     for i in range(T - length_dtw + 1):
-        true_window = y_true_pad[i : i + length_dtw]
-        pred_window = y_pred_pad[i : i + length_dtw]
+        true_window = X_true_pad[i : i + length_dtw]
+        pred_window = X_pred_pad[i : i + length_dtw]
         
         # center point index 
         target_idx = i + half_len
@@ -114,16 +114,36 @@ def agg_reconstruction_errors(reconstruction_errors: torch.Tensor, sw: int, ss: 
 
 def agg_gan_errors(
     reconstruction_errors: torch.Tensor,
-    discriminator_errors: torch.Tensor,
+    discriminator_scores: torch.Tensor,
     sw: int,
     ss: int,
     alpha: float = 0.5,
 ) -> torch.Tensor:
-    N = discriminator_errors.shape[0]
+    """
+    Aggregates sliding window reconstruction errors to a per-timestep error by computing the median and the discriminator scores to a  
+    per-timestep score by extracting the maximum probability from the Gaussian KDE estimation.
+
+    Parameters
+    ----------
+    reconstruction_errors : torch.Tensor
+        Reconstruction error per window and per position within that window.
+    discriminator_scores: torch.Tensor
+        Discriminator scores per window.
+    sw : int
+        Sliding window size.
+    ss : int
+        Sliding window step size.
+
+    Returns
+    -------
+    agg_errors : torch.Tensor of shape (T,)
+        Median aggregated error value for each original timestep.
+    """
+    N = discriminator_scores.shape[0]
     T = (N - 1) * ss + sw
 
     # convert to numpy and invert the discriminator scores
-    inverted_discriminator_errors = -1 * np.array(discriminator_errors).flatten()
+    inverted_discriminator_scores = -1 * np.array(discriminator_scores).flatten()
     reconstruction_errors = reconstruction_errors.numpy()
 
     # lists where the errors will be merged together from multiple windows
@@ -140,7 +160,7 @@ def agg_gan_errors(
         agg_re.append(median_re)
         
         # kde of discriminator scores
-        discriminators_at_t = [inverted_discriminator_errors[k] for k in range(k_min, k_max + 1)]
+        discriminators_at_t = [inverted_discriminator_scores[k] for k in range(k_min, k_max + 1)]
         
         if len(discriminators_at_t) > 1 and np.var(discriminators_at_t) > 1e-8:
             # fir kernel density estimation over the overlapping window discriminator scores

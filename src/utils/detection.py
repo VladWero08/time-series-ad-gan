@@ -93,6 +93,7 @@ def get_anomaly_intervals(
 
 
 def merge_anomaly_intervals(intervals: t.List[t.Tuple[int, int]]) -> t.List[t.Tuple[int, int]]:
+    """Merges the given list of intervals into a list of continous intervals."""
     if not intervals:
         return []
 
@@ -150,10 +151,3 @@ def detect_contextual_anomalies(
     anomaly_intervals = merge_anomaly_intervals(anomaly_intervals)
 
     return anomaly_intervals
-
-
-if __name__ == "__main__":
-    intervals = [(1, 2), (3, 5), (2, 4)]
-
-    print(f"Intervals: {intervals}")
-    print(f"Merged: {merge_anomaly_intervals(intervals)}")

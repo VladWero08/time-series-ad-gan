@@ -114,7 +114,7 @@ def test(
         ds_preds = model(ds.X.to(device)).cpu()
         ds_preds_agg = agg_reconstruction_errors(ds_preds, sw, ss)
 
-        ds_sw_errors = point_wise_error(ds_preds, ds.X)
+        ds_sw_errors = point_wise_error(ds.X, ds_preds)
         ds_errors = agg_reconstruction_errors(ds_sw_errors, sw, ss) 
     
     return ds_preds_agg, ds_errors
@@ -123,7 +123,7 @@ def test(
 def run_pipeline(
     X: np.ndarray,
     y: np.ndarray,
-    train_ratio: float = 0.40,
+    train_ratio: float = 0.60,
     val_ratio: float = 0.10,
     sw: int = 100,
     ss: int = 1,
@@ -200,7 +200,7 @@ def run_pipeline(
             # compute the test labels based on the forecasting errors obtained in training
             y_test_hat = detect_point_anomalies(y_train_errors, y_test_errors)
 
-            precision, recall, f1 = evaluate_point_anomalies(y_true=y_test, y_predict=y_test_hat)
+            precision, recall, f1 = evaluate_point_anomalies(y_test, y_test_hat)
         case "contextual":
             # compute the test anomaly sequences from test labels 
             y_test_intervals = get_anomaly_intervals(y_test) 
@@ -219,7 +219,7 @@ def run_pipeline(
 
     if plot:
         # for plotting, the test samples and their predictions need to be cutoff to match the predicted labels
-        plot_performance(X=X_test[cutoff:-cutoff], X_preds=X_test_preds[cutoff:-cutoff], y=y_test_hat)
+        plot_performance(X=X_test[cutoff:-cutoff], X_preds=X_test_preds[cutoff:-cutoff], y_hat=y_test_hat)
 
 if __name__ == "__main__":
     np.random.seed(999)
@@ -229,24 +229,20 @@ if __name__ == "__main__":
     y = np.zeros(T)
 
     # inject spike anomalies
-    anomaly_idx = [1790, 1850, 1930]
+    anomaly_idx = [1790, 1791, 1792, 1850, 1851, 1852, 1930, 1931, 1932]
     ts[anomaly_idx] += 15.0
     y[anomaly_idx] = 1
 
-    # min-max normalization to [-1, 1]
-    ts_min = ts.min(axis=0)
-    ts_max = ts.max(axis=0)
-    ts_normalized = 2 * (ts - ts_min) / (ts_max - ts_min) - 1
-
     run_pipeline(
-        ts_normalized,
+        ts,
         y,
-        train_ratio=0.70,
-        val_ratio=0.10,
         sw=100,
         ss=1,
+        hidden_size=20,
         epochs=20,
+        lr=1e-3,
         batch_size=64,
         device="cuda" if torch.cuda.is_available() else "cpu",
+        anomaly_type="contextual",
         plot=True,
     )

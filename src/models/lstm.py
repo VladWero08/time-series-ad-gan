@@ -102,7 +102,7 @@ def test(
     model.eval()
     with torch.no_grad():
         ds_preds = model(ds.X.to(device)).cpu()
-        ds_errors = point_wise_error(ds_preds, ds.y)
+        ds_errors = point_wise_error(ds.y, ds_preds)
 
     return ds_preds, ds_errors
 
@@ -110,7 +110,7 @@ def test(
 def run_pipeline(
     X: np.ndarray,
     y: np.ndarray,
-    train_ratio: float = 0.40,
+    train_ratio: float = 0.60,
     val_ratio: float = 0.10,
     sw: int = 250,
     ss: int = 1,
@@ -183,7 +183,7 @@ def run_pipeline(
             # compute the test labels based on the forecasting errors obtained in training
             y_test_hat = detect_point_anomalies(y_train_errors, y_test_errors)
 
-            precision, recall, f1 = evaluate_point_anomalies(y_true=y_test, y_predict=y_test_hat)
+            precision, recall, f1 = evaluate_point_anomalies(y_test, y_test_hat)
         case "contextual":
             # compute the test anomaly sequences from test labels 
             y_test_intervals = get_anomaly_intervals(y_test) 
@@ -202,7 +202,7 @@ def run_pipeline(
 
     if plot:
         # for plotting, first sw test points need to be removed no forecast was made for them
-        plot_performance(X=X_test[sw:], X_preds=X_test_preds, y=y_test_hat)
+        plot_performance(X=X_test[sw:], X_preds=X_test_preds, y_hat=y_test_hat)
 
 
 if __name__ == "__main__":
@@ -217,19 +217,13 @@ if __name__ == "__main__":
     ts[anomaly_idx] += 15.0
     y[anomaly_idx] = 1
 
-    # min-max normalization to [-1, 1]
-    ts_min = ts.min(axis=0)
-    ts_max = ts.max(axis=0)
-    ts_normalized = 2 * (ts - ts_min) / (ts_max - ts_min) - 1
-
     run_pipeline(
-        ts_normalized,
+        ts,
         y,
-        train_ratio=0.70,
-        val_ratio=0.10,
         sw=100,
         ss=1,
         epochs=20,
+        lr=1e-3,
         batch_size=64,
         device="cuda" if torch.cuda.is_available() else "cpu",
         anomaly_type="contextual",

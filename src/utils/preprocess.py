@@ -62,14 +62,25 @@ def split_reconstruct(
         val_end   = int(T * (train_ratio + val_ratio))
         cutoff = sw // 2
 
-        X_train, y_train    = normalization(X[:train_end]), y[:train_end][cutoff:-cutoff]
-        X_val, y_val        = normalization(X[train_end:val_end]), y[train_end:val_end][cutoff:-cutoff]
-        X_test, y_test      = normalization(X[val_end:]), y[val_end:][cutoff:-cutoff]      
+        if val_ratio > 0:
+            X_train, y_train    = normalization(X[:train_end]), y[:train_end][cutoff:-cutoff]
+            X_val, y_val        = normalization(X[train_end:val_end]), y[train_end:val_end][cutoff:-cutoff]
+            X_test, y_test      = normalization(X[val_end:]), y[val_end:][cutoff:-cutoff]      
 
-        if log:
-            print(f"Series shape : {X.shape}")
-            print(f"Train        : timesteps 0 -> {train_end}  ({train_end} steps)")
-            print(f"Validation   : timesteps {train_end} -> {val_end}  ({val_end - train_end} steps)")
-            print(f"Test         : timesteps {val_end} -> {T}  ({T - val_end} steps)\n")
+            if log:
+                print(f"Series shape : {X.shape}")
+                print(f"Train        : timesteps 0 -> {train_end}  ({train_end} steps)")
+                print(f"Validation   : timesteps {train_end} -> {val_end}  ({val_end - train_end} steps)")
+                print(f"Test         : timesteps {val_end} -> {T}  ({T - val_end} steps)\n")
 
-        return X_train, y_train, X_val, y_val, X_test, y_test
+            return X_train, y_train, X_val, y_val, X_test, y_test
+        else:
+            X_train, y_train    = normalization(X[:train_end]), y[:train_end][cutoff:-cutoff]
+            X_test, y_test      = normalization(X[train_end:]), y[train_end:][cutoff:-cutoff]      
+
+            if log:
+                print(f"Series shape : {X.shape}")
+                print(f"Train        : timesteps 0 -> {train_end}  ({train_end} steps)")
+                print(f"Test         : timesteps {train_end} -> {T}  ({T - train_end} steps)\n")
+
+            return X_train, y_train, X_test, y_test

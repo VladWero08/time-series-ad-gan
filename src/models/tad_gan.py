@@ -296,7 +296,7 @@ def test(
         ds_X_rec_agg = agg_reconstruction_errors(ds_X_rec, sw=sw, ss=ss)
 
         # compute the reconstruction error (T, sw, n_features)
-        rec_errors = rec_error_func(ds_X_rec, ds.X)
+        rec_errors = rec_error_func(ds.X, ds_X_rec)
         # compute the discriminator score (T, 1)
         disc_scores = model.dx(ds_X_rec).detach()
         # compute the final anomaly score
@@ -308,7 +308,7 @@ def test(
 def run_pipeline(
     X: np.ndarray,
     y: np.ndarray,
-    train_ratio: float = 0.7,
+    train_ratio: float = 0.5,
     sw: int = 100,
     ss: int = 1,
     latent_size: int = 20,
@@ -366,13 +366,13 @@ def run_pipeline(
             # compute the test labels based on the forecasting errors obtained in training
             y_test_hat = detect_point_anomalies(y_train_anomaly_scores, y_test_anomaly_scores)
 
-            precision, recall, f1 = evaluate_point_anomalies(y_true=y_test, y_predict=y_test_hat)
+            precision, recall, f1 = evaluate_point_anomalies(y_test, y_test_hat)
         case "contextual":
             # compute the test anomaly sequences from test labels 
             y_test_intervals = get_anomaly_intervals(y_test)
             # compute the test anomaly sequences from test forecast errors
             y_test_hat_intervals = detect_contextual_anomalies(y_test_anomaly_scores)
-            y_test_labels = intervals_to_points(y_test_hat_intervals, y_test.shape[0])
+            y_test_hat = intervals_to_points(y_test_hat_intervals, y_test.shape[0])
 
             precision, recall, f1 = evaluate_collective_anomalies(y_test_intervals, y_test_hat_intervals)
 
@@ -385,7 +385,7 @@ def run_pipeline(
 
     if plot:
         # for plotting, the test samples and their predictions need to be cutoff to match the predicted labels
-        plot_performance(X=X_test[cutoff:-cutoff], X_preds=X_test_preds[cutoff:-cutoff], y=y_test_labels)
+        plot_performance(X=X_test[cutoff:-cutoff], X_preds=X_test_preds[cutoff:-cutoff], y_hat=y_test_hat)
 
 
 if __name__ == "__main__":
@@ -400,13 +400,8 @@ if __name__ == "__main__":
     ts[anomaly_idx] += 15.0
     y[anomaly_idx] = 1
 
-    # min-max normalization to [-1, 1]
-    ts_min = ts.min(axis=0)
-    ts_max = ts.max(axis=0)
-    ts_normalized = 2 * (ts - ts_min) / (ts_max - ts_min) - 1
-
     run_pipeline(
-        ts_normalized,
+        ts,
         y,
         sw=100,
         ss=1,
