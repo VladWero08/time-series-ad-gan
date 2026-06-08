@@ -308,7 +308,7 @@ def test(
 def run_pipeline(
     X: np.ndarray,
     y: np.ndarray,
-    train_ratio: float = 0.5,
+    train_ratio: float = 0.7,
     sw: int = 100,
     ss: int = 1,
     latent_size: int = 20,
