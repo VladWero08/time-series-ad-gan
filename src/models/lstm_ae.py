@@ -2,15 +2,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 import typing as t
-
 from torch.utils.data import DataLoader
 
-from src.models.utils import normalization
-from src.models.utils import point_wise_error, agg_reconstruction_errors
-from src.models.utils import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
-from src.models.utils import evaluate_point_anomalies, evaluate_collective_anomalies
-from src.models.utils import intervals_to_points, plot_performance
-from src.models.signals import SignalsReconstructDataset
+from src.utils.preprocess import normalization, intervals_to_points
+from src.utils.errors import point_wise_error, agg_reconstruction_errors
+from src.utils.evaluation import evaluate_point_anomalies, evaluate_collective_anomalies, plot_performance
+from src.utils.detection import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
+from src.utils.signals import SignalsReconstructDataset
 
 
 class TSAD_LSTM_AE(nn.Module):
@@ -170,10 +168,10 @@ def run_pipeline(
     print(f"Test         : timesteps {val_end} -> {T}  ({T - val_end} steps)\n")
 
     # build sliding windows for train, val, test
-    train_ds = SignalsReconstructDataset(X_train, sw=sw, ss=1)
+    train_ds = SignalsReconstructDataset(X_train, sw=sw, ss=ss)
     train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
-    val_ds   = SignalsReconstructDataset(X_val,  sw=sw, ss=1)
-    test_ds  = SignalsReconstructDataset(X_test, sw=sw, ss=1)
+    val_ds   = SignalsReconstructDataset(X_val,  sw=sw, ss=ss)
+    test_ds  = SignalsReconstructDataset(X_test, sw=sw, ss=ss)
 
     # build and train the LSTM for this channel
     model = TSAD_LSTM_AE(input_size=n_features, hidden_size=hidden_size, num_layers=num_layers).to(device)

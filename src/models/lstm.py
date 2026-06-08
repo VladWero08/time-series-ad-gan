@@ -5,11 +5,12 @@ import typing as t
 
 from torch.utils.data import DataLoader
 
-from src.models.utils import normalization
-from src.models.utils import point_wise_error, get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
-from src.models.utils import evaluate_point_anomalies, evaluate_collective_anomalies
-from src.models.utils import intervals_to_points, plot_performance
-from src.models.signals import SignalsForecastDataset
+
+from src.utils.preprocess import normalization, intervals_to_points
+from src.utils.errors import point_wise_error
+from src.utils.evaluation import evaluate_point_anomalies, evaluate_collective_anomalies, plot_performance
+from src.utils.detection import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
+from src.utils.signals import SignalsForecastDataset
 
 
 class TSAD_LSTM(nn.Module):
@@ -17,7 +18,7 @@ class TSAD_LSTM(nn.Module):
         self, 
         input_size: int, 
         hidden_size: int = 80, 
-        num_layers: int = 2, 
+        num_layers: int = 2,
         dropout: float = 0.3,
     ) -> None:
         super().__init__()

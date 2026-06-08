@@ -9,7 +9,7 @@ class SignalsForecastDataset(Dataset):
     """
     Represents the datasets formed by sliding a window over a time series, using a window size `sw` and a step size `ss`.
 
-    Given a time series `X`, it divides it into smaller subsequences, and the target `y ' is the `sw + 1` value that needs to be forecasted. 
+    Given a time series `X`, it divides it into smaller subsequences, and the target `y` is the `sw + 1` value that needs to be forecasted. 
     It does not consider the forecasting for the first `sw - 1` points, as they do not possess enough neighbours to form a full window.
     """
     def __init__(self, X: torch.tensor, sw: int = 250, ss: int = 1) -> None:
@@ -67,8 +67,8 @@ class SignalsReconstructDataset(Dataset):
     """
     Represents the datasets formed by sliding a window over a time series, using a window size `sw` and a step size `ss`.
 
-    Given a time series `X`, it divides it into smaller subsequences, and the target is to be able to reconstruct all subwidnows in the dataset. 
-    It does not consider the forecasting for the first `sw - 1` points, as they do not possess enough neighbours to form a full window.
+    Given a time series `X`, it divides it into smaller subsequences, and the target is to be able to reconstruct all subsequences in the dataset. 
+    It does not consider the reconstruction for the first `sw - 1` points, as they do not possess enough neighbours to form a full window.
     """    
     def __init__(self, X: torch.tensor, sw: int = 250, ss: int = 1) -> None:
         """

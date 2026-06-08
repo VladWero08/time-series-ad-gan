@@ -3,18 +3,13 @@ import torch.nn as nn
 import torch.optim as optim
 import typing as t
 import numpy as np
-import matplotlib.pyplot as plt
-
 from torch.utils.data import DataLoader
 
-from src.models.signals import SignalsReconstructDataset 
-
-from src.models.utils import normalization
-from src.models.utils import gradient_penalty
-from src.models.utils import point_wise_error, area_wise_error, dtw_error, agg_gan_errors
-from src.models.utils import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
-from src.models.utils import evaluate_point_anomalies, evaluate_collective_anomalies
-from src.models.utils import agg_reconstruction_errors, intervals_to_points, plot_performance
+from src.utils.preprocess import normalization, intervals_to_points
+from src.utils.errors import point_wise_error, gradient_penalty, agg_reconstruction_errors, agg_gan_errors
+from src.utils.evaluation import evaluate_point_anomalies, evaluate_collective_anomalies, plot_performance
+from src.utils.detection import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
+from src.utils.signals import SignalsReconstructDataset
 
 
 class GeneratorG(nn.Module):
