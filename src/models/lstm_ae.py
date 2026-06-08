@@ -15,7 +15,7 @@ class TSAD_LSTM_AE(nn.Module):
     def __init__(
         self, 
         input_size: int = 1, 
-        hidden_size: int = 80, 
+        latent_size: int = 20,
         num_layers: int = 2, 
         dropout: float = 0.3,
     ) -> None:
@@ -23,21 +23,21 @@ class TSAD_LSTM_AE(nn.Module):
 
         self.encoder = nn.LSTM(
             input_size=input_size,
-            hidden_size=hidden_size,
+            hidden_size=latent_size,
             num_layers=num_layers,
             batch_first=True,
             dropout=dropout if num_layers > 1 else 0.0
         ) 
 
         self.decoder = nn.LSTM(
-            input_size=hidden_size,
-            hidden_size=hidden_size,
+            input_size=latent_size,
+            hidden_size=latent_size,
             num_layers=num_layers,
             batch_first=True,
             dropout=dropout if num_layers > 1 else 0.0
         )
 
-        self.fc = nn.Linear(hidden_size, input_size)
+        self.fc = nn.Linear(latent_size, input_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         encoder_out, (hn, cn) = self.encoder(x)
@@ -127,9 +127,9 @@ def run_pipeline(
     val_ratio: float = 0.10,
     sw: int = 100,
     ss: int = 1,
-    hidden_size: int = 80,
+    latent_size: int = 20,
     num_layers: int = 2,
-    epochs: int = 50,
+    epochs: int = 35,
     batch_size: int = 64,
     lr: float = 1e-4,
     patience: int = 10,
@@ -174,7 +174,7 @@ def run_pipeline(
     test_ds  = SignalsReconstructDataset(X_test, sw=sw, ss=ss)
 
     # build and train the LSTM for this channel
-    model = TSAD_LSTM_AE(input_size=n_features, hidden_size=hidden_size, num_layers=num_layers).to(device)
+    model = TSAD_LSTM_AE(input_size=n_features, latent_size=latent_size, num_layers=num_layers).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
     
@@ -229,7 +229,7 @@ if __name__ == "__main__":
     y = np.zeros(T)
 
     # inject spike anomalies
-    anomaly_idx = [1790, 1791, 1792, 1850, 1851, 1852, 1930, 1931, 1932]
+    anomaly_idx = [1650, 1651, 1652, 1800, 1801, 1802, 1930, 1931, 1932]
     ts[anomaly_idx] += 15.0
     y[anomaly_idx] = 1
 
@@ -238,8 +238,6 @@ if __name__ == "__main__":
         y,
         sw=100,
         ss=1,
-        hidden_size=20,
-        epochs=20,
         lr=1e-3,
         batch_size=64,
         device="cuda" if torch.cuda.is_available() else "cpu",
