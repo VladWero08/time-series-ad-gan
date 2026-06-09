@@ -24,63 +24,72 @@ def intervals_to_points(y_intervals: t.List[t.List], n_labels: int) -> torch.Ten
     return point_labels
 
 
-def split_forecast(
-        X: np.ndarray, 
+def split(
+        X: np.ndarray,
         y: np.ndarray,
         sw: int,
         train_ratio: float = 0.5,
         val_ratio: float = 0.1,
-        log: bool = True,
+        type: str = "forecast",
     ) -> t.Tuple[np.ndarray]:
+        """
+        Splits a time series and its anomaly labels into train, validation, and test subsets:
+        - partitions `X` and `y` based on the provided ratios;
+        - applies normalization to the splits;
+        - slices the labels based on the prediction process used (forecast or reconstrucion).
+
+        Parameters
+        ----------
+        X: np.ndarray of shape (T, n_features)
+            The full time-series feature matrix.
+        y: np.ndarray of shape (T,)
+            The corresponding ground-truth anomaly labels.
+        sw: int
+            Sliding window size used by the sequence generator model.
+        train_ratio: float, default=0.5
+            The fraction of total data allocated for the training.
+        val_ratio: float, default=0.1
+            The fraction of total data allocated for the validation. 
+            If set to 0.0, the validation split is skipped entirely.
+        type: {"forecast", "reconstruct"}, default="forecast"
+            - "forecast": removes first `sw` points from the label tensor.
+            - "reconstruct": removes `sw // 2` points from both the start and end of the label tensor.
+
+        Returns
+        -------
+        tuple of np.ndarray
+            A dynamic flat tuple containing the split arrays in chronological order:
+            - If test, val, and train are active: (X_train, y_train, X_val, y_val, X_test, y_test)
+            - If validation is skipped: (X_train, y_train, X_test, y_test)
+            - If train and validation consume the whole series: (X_train, y_train, X_val, y_val)
+        """
         T = X.shape[0]
         train_end = int(T * train_ratio)
         val_end   = int(T * (train_ratio + val_ratio))
+        has_val = val_ratio > 0.0
+        has_test = (train_ratio + val_ratio) < 1.0
 
-        X_train, y_train    = normalization(X[:train_end]), y[:train_end][sw:]
-        X_val, y_val        = normalization(X[train_end:val_end]), y[train_end:val_end][sw:]
-        X_test, y_test      = normalization(X[val_end:]), y[val_end:][sw:]  
+        match type:
+            case "forecast":
+                # when forecasting, the first sw points will not be used
+                y_slice = slice(sw, None)
+            case "reconstruct":
+                # when reconstructing, the first and last sw / 2 points will not be used
+                cutoff = sw // 2
+                y_slice = slice(cutoff, -cutoff)
 
-        if log:
-            print(f"Series shape : {X.shape}")
-            print(f"Train        : timesteps 0 -> {train_end}  ({train_end} steps)")
-            print(f"Validation   : timesteps {train_end} -> {val_end}  ({val_end - train_end} steps)")
-            print(f"Test         : timesteps {val_end} -> {T}  ({T - val_end} steps)\n")
+        data_splits = []
+        # slices used for train, validation and test
+        data_slices = [
+            (True, slice(0, train_end)),
+            (has_val, slice(train_end, val_end)),
+            (has_test, slice(val_end, None))
+        ]
 
-        return X_train, y_train, X_val, y_val, X_test, y_test
+        for active, data_slice in data_slices:
+            if active:
+                X_split = normalization(X[data_slice])
+                y_split = y[data_slice][y_slice]
+                data_splits.append(X_split); data_splits.append(y_split)
 
-
-def split_reconstruct(
-        X: np.ndarray, 
-        y: np.ndarray,
-        sw: int,
-        train_ratio: float = 0.5,
-        val_ratio: float = 0.1,
-        log: bool = True,
-    ) -> t.Tuple[np.ndarray]:
-        T = X.shape[0]
-        train_end = int(T * train_ratio)
-        val_end   = int(T * (train_ratio + val_ratio))
-        cutoff = sw // 2
-
-        if val_ratio > 0:
-            X_train, y_train    = normalization(X[:train_end]), y[:train_end][cutoff:-cutoff]
-            X_val, y_val        = normalization(X[train_end:val_end]), y[train_end:val_end][cutoff:-cutoff]
-            X_test, y_test      = normalization(X[val_end:]), y[val_end:][cutoff:-cutoff]      
-
-            if log:
-                print(f"Series shape : {X.shape}")
-                print(f"Train        : timesteps 0 -> {train_end}  ({train_end} steps)")
-                print(f"Validation   : timesteps {train_end} -> {val_end}  ({val_end - train_end} steps)")
-                print(f"Test         : timesteps {val_end} -> {T}  ({T - val_end} steps)\n")
-
-            return X_train, y_train, X_val, y_val, X_test, y_test
-        else:
-            X_train, y_train    = normalization(X[:train_end]), y[:train_end][cutoff:-cutoff]
-            X_test, y_test      = normalization(X[train_end:]), y[train_end:][cutoff:-cutoff]      
-
-            if log:
-                print(f"Series shape : {X.shape}")
-                print(f"Train        : timesteps 0 -> {train_end}  ({train_end} steps)")
-                print(f"Test         : timesteps {train_end} -> {T}  ({T - train_end} steps)\n")
-
-            return X_train, y_train, X_test, y_test
+        return tuple(data_splits)

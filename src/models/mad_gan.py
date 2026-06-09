@@ -5,7 +5,7 @@ import typing as t
 import numpy as np
 from torch.utils.data import DataLoader
 
-from src.utils.preprocess import normalization, intervals_to_points
+from src.utils.preprocess import intervals_to_points, split
 from src.utils.errors import point_wise_error, gradient_penalty, agg_reconstruction_errors, agg_gan_errors
 from src.utils.evaluation import evaluate_point_anomalies, evaluate_collective_anomalies, plot_performance
 from src.utils.detection import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
@@ -154,7 +154,8 @@ def train(
 
         loss_d_epoch /= (len(train_dl) * n_critics)
         loss_g_epoch /= len(train_dl)
-        print(f"Epoch {epoch+1:3d} | D Loss: {loss_d_epoch:.6f} | G Loss: {loss_g_epoch:.6f}")
+        if (epoch + 1) % 5 == 0:
+            print(f"Epoch {epoch+1:3d} | D Loss: {loss_d_epoch:.6f} | G Loss: {loss_g_epoch:.6f}")
 
 
 def find_best_latent(
@@ -226,6 +227,8 @@ def test(
 def run_pipeline(
     X: np.ndarray,
     y: np.ndarray,
+    X_test: t.Optional[np.ndarray] = None,
+    y_test: t.Optional[np.ndarray] = None,
     train_ratio: float = 0.7,
     sw: int = 100,
     ss: int = 1,
@@ -240,23 +243,17 @@ def run_pipeline(
     anomaly_type: str = "point",
     plot: bool = False,
 ) -> np.ndarray:
-    T, n_features = X.shape
-    train_end = int(T * train_ratio)
-    # because the first and last elements in the subsequences do not get many reconstruction value to aggregate from,
-    # a cutoff will be applied to both ends of the signal
-    cutoff = sw // 2
-
-    X_train, y_train    = normalization(X[:train_end]), y[:train_end][cutoff:-cutoff]
-    X_test, y_test      = normalization(X[train_end:]), y[train_end:][cutoff:-cutoff]      
-
-    print(f"Series shape : {X.shape}")
-    print(f"Train        : timesteps 0 -> {train_end}  ({train_end} steps)")
-    print(f"Test         : timesteps {train_end} -> {T}  ({T - train_end} steps)\n")
+    if X_test is None or y_test is None:
+        val_ratio = 0
+        X_train, y_train, X_test, y_test = split(X, y, sw, train_ratio, val_ratio, type="reconstruct")
+    else:
+        X_train, y_train = X, y
 
     # build sliding windows for train, val, test
     train_ds = SignalsReconstructDataset(X_train, sw=sw, ss=ss)
     train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
     test_ds  = SignalsReconstructDataset(X_test, sw=sw, ss=ss)
+    cutoff = sw // 2
 
     # build and train discriminator and generator
     model = MADGAN(signal_size=sw, latent_size=latent_size, n_features=n_features, device=device)

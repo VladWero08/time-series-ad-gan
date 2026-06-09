@@ -4,7 +4,7 @@ import torch.nn as nn
 import typing as t
 from torch.utils.data import DataLoader
 
-from src.utils.preprocess import normalization, intervals_to_points
+from src.utils.preprocess import intervals_to_points, split
 from src.utils.errors import point_wise_error, agg_reconstruction_errors
 from src.utils.evaluation import evaluate_point_anomalies, evaluate_collective_anomalies, plot_performance
 from src.utils.detection import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
@@ -85,7 +85,8 @@ def train(
             val_loss = criterion(val_pred, val_ds.X.to(device)).item()
 
         # metrics
-        print(f"Epoch {epoch+1:3d} | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f}")
+        if (epoch + 1) % 5 == 0:
+            print(f"Epoch {epoch+1:3d} | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f}")
 
         # early stopping
         if val_loss < best_val_loss - min_delta:
@@ -123,6 +124,8 @@ def test(
 def run_pipeline(
     X: np.ndarray,
     y: np.ndarray,
+    X_test: t.Optional[np.ndarray] = None,
+    y_test: t.Optional[np.ndarray] = None,
     train_ratio: float = 0.60,
     val_ratio: float = 0.10,
     sw: int = 100,
@@ -151,27 +154,18 @@ def run_pipeline(
     val_ratio : float
         Fraction of data used for validation / early stopping (default 10%).
     """
-    T, n_features = X.shape
-    train_end = int(T * train_ratio)
-    val_end   = int(T * (train_ratio + val_ratio))
-    # because the first and last elements in the subsequences do not get many reconstruction value to aggregate from,
-    # a cutoff will be applied to both ends of the signal
-    cutoff = sw // 2
-
-    X_train, y_train    = normalization(X[:train_end]), y[:train_end][cutoff:-cutoff]
-    X_val, y_val        = normalization(X[train_end:val_end]), y[train_end:val_end][cutoff:-cutoff]
-    X_test, y_test      = normalization(X[val_end:]), y[val_end:][cutoff:-cutoff]      
-
-    print(f"Series shape : {X.shape}")
-    print(f"Train        : timesteps 0 -> {train_end}  ({train_end} steps)")
-    print(f"Validation   : timesteps {train_end} -> {val_end}  ({val_end - train_end} steps)")
-    print(f"Test         : timesteps {val_end} -> {T}  ({T - val_end} steps)\n")
+    if X_test is None or y_test is None:
+        X_train, y_train, X_val, y_val, X_test, y_test = split(X, y, sw, train_ratio, val_ratio, type="reconstruct")
+    else:
+        train_ratio = 1 - val_ratio
+        X_train, y_train, X_val, y_val = split(X, y, sw, train_ratio, val_ratio, type="reconstruct")
 
     # build sliding windows for train, val, test
     train_ds = SignalsReconstructDataset(X_train, sw=sw, ss=ss)
     train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
     val_ds   = SignalsReconstructDataset(X_val,  sw=sw, ss=ss)
     test_ds  = SignalsReconstructDataset(X_test, sw=sw, ss=ss)
+    cutoff = sw // 2
 
     # build and train the LSTM for this channel
     model = TSAD_LSTM_AE(input_size=n_features, latent_size=latent_size, num_layers=num_layers).to(device)
