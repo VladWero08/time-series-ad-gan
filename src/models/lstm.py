@@ -126,7 +126,7 @@ def run_pipeline(
     device: str = "cpu",
     anomaly_type: str = "point",
     plot: bool = False,
-) -> None:
+) -> t.Tuple[float, float, float]:
     """
     Full anomaly detection pipeline for a multivariate time series.
 
@@ -189,16 +189,17 @@ def run_pipeline(
 
             precision, recall, f1 = evaluate_collective_anomalies(y_test_intervals, y_test_hat_intervals)
 
-    print()
-    print("Metrics")
-    print("-------")
-    print(f"Precision = {precision:.4f}")
-    print(f"Recall = {recall:.4f}")
-    print(f"F1 = {f1:.4f}")
-
     if plot:
+        print()
+        print("Metrics")
+        print("-------")
+        print(f"Precision = {precision:.4f}")
+        print(f"Recall = {recall:.4f}")
+        print(f"F1 = {f1:.4f}")
         # for plotting, first sw test points need to be removed no forecast was made for them
         plot_performance(X=X_test[sw:], X_preds=X_test_preds, y_hat=y_test_hat)
+
+    return precision, recall, f1
 
 
 if __name__ == "__main__":
