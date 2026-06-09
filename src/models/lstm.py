@@ -154,6 +154,7 @@ def run_pipeline(
     test_ds  = SignalsForecastDataset(X_test, sw, ss)
 
     # build and train the LSTM for this channel
+    _, n_features = X.shape
     model = TSAD_LSTM(input_size=n_features, hidden_size=hidden_size, num_layers=num_layers).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()

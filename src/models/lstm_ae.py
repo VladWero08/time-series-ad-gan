@@ -168,6 +168,7 @@ def run_pipeline(
     cutoff = sw // 2
 
     # build and train the LSTM for this channel
+    _, n_features = X.shape
     model = TSAD_LSTM_AE(input_size=n_features, latent_size=latent_size, num_layers=num_layers).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()

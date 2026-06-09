@@ -340,6 +340,7 @@ def run_pipeline(
     test_ds  = SignalsReconstructDataset(X_test, sw=sw, ss=ss)
     cutoff = sw // 2
 
+    _, n_features = X.shape
     model = TadGAN(signal_size=sw, latent_size=latent_size, n_features=n_features, device=device)
     train(
         model, 

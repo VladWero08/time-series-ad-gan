@@ -20,7 +20,7 @@ def intervals_to_points(y_intervals: t.List[t.List], n_labels: int) -> torch.Ten
     point_labels = torch.zeros(n_labels)
     for y_interval in y_intervals:
         start, end = y_interval[0], y_interval[1]
-        point_labels[start:end] = 1
+        point_labels[start:end+1] = 1
     return point_labels
 
 

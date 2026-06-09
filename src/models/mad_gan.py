@@ -256,6 +256,7 @@ def run_pipeline(
     cutoff = sw // 2
 
     # build and train discriminator and generator
+    _, n_features = X.shape
     model = MADGAN(signal_size=sw, latent_size=latent_size, n_features=n_features, device=device)
     train(
         model, 
