@@ -387,7 +387,7 @@ def run_pipeline(
 
         if n_features == 1:
             # for plotting, the test samples and their predictions need to be cutoff to match the predicted labels
-            plot_performance(X=X_test[cutoff:-cutoff], X_preds=X_test_preds[cutoff:-cutoff], y_hat=y_test_hat)
+            plot_performance(X=X_test[cutoff:-cutoff], X_preds=X_test_preds[cutoff:-cutoff])
 
     return precision, recall, f1
 
