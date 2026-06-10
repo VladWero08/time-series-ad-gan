@@ -29,10 +29,10 @@ def dtw_error(X_true: torch.Tensor, X_pred: torch.Tensor, window: int = 10) -> t
     Reference: https://github.com/sintel-dev/Orion/blob/master/orion/primitives/timeseries_errors.py
     """
     def dtw_distance(ts1: torch.Tensor, ts2: torch.Tensor) -> torch.Tensor:
-        n, m = ts1.shape[0], ts2.shape[0]
+        n, m, features = ts1.shape[0], ts2.shape[0], ts1.shape[1]
         
         # initialize the dp matrix for dtw
-        dtw_matrix = torch.full((n + 1, m + 1), float("inf"))
+        dtw_matrix = torch.full((n + 1, m + 1, features), float("inf"))
         dtw_matrix[0, 0] = 0
 
         for i in range(1, n + 1):
@@ -40,11 +40,13 @@ def dtw_error(X_true: torch.Tensor, X_pred: torch.Tensor, window: int = 10) -> t
                 # reconstruction error of the current point
                 diff = abs(ts1[i - 1] - ts2[j - 1])
                 # lowest error from previous time-series data
-                min_ = torch.min(torch.stack([
-                    dtw_matrix[i - 1, j], 
-                    dtw_matrix[i, j - 1], 
-                    dtw_matrix[i - 1, j - 1]
-                ]))
+                min_ = torch.min(
+                    torch.stack([
+                        dtw_matrix[i - 1, j], 
+                        dtw_matrix[i, j - 1], 
+                        dtw_matrix[i - 1, j - 1]
+                    ]), dim=0
+                ).values
                 dtw_matrix[i, j] = diff + min_
 
         return dtw_matrix[n, m]
@@ -54,11 +56,11 @@ def dtw_error(X_true: torch.Tensor, X_pred: torch.Tensor, window: int = 10) -> t
     T = X_true.shape[0]
 
     # pad inputs with zeros    
-    pad_shape = (half_len, half_len)
+    pad_shape = (0, 0, half_len, half_len)
     X_true_pad = torch.nn.functional.pad(X_true, pad_shape, mode='constant', value=0.0)
     X_pred_pad = torch.nn.functional.pad(X_pred, pad_shape, mode='constant', value=0.0)
     
-    st = torch.zeros(T, device=X_true.device)
+    st = torch.zeros(X_true.shape, device=X_true.device)
     
     # calculate local DTW within the window step-by-step
     for i in range(T - length_dtw + 1):
