@@ -6,7 +6,7 @@ import typing as t
 from torch.utils.data import DataLoader
 
 
-from src.utils.preprocess import intervals_to_points, split
+from src.utils.preprocess import normalization, intervals_to_points, split
 from src.utils.errors import point_wise_error
 from src.utils.evaluation import evaluate_point_anomalies, evaluate_collective_anomalies, plot_performance
 from src.utils.detection import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
@@ -146,6 +146,7 @@ def run_pipeline(
     else:
         train_ratio = 1 - val_ratio
         X_train, y_train, X_val, y_val = split(X, y, sw, train_ratio, val_ratio, type="forecast")
+        X_test = normalization(X_test)
 
     # build sliding windows for train, val, test
     train_ds = SignalsForecastDataset(X_train, sw, ss)
@@ -197,8 +198,10 @@ def run_pipeline(
         print(f"Precision = {precision:.4f}")
         print(f"Recall = {recall:.4f}")
         print(f"F1 = {f1:.4f}")
-        # for plotting, first sw test points need to be removed no forecast was made for them
-        plot_performance(X=X_test[sw:], X_preds=X_test_preds, y_hat=y_test_hat)
+
+        if n_features == 1:
+            # for plotting, first sw test points need to be removed no forecast was made for them
+            plot_performance(X=X_test[sw:], X_preds=X_test_preds, y_hat=y_test_hat)
 
     return precision, recall, f1
 
