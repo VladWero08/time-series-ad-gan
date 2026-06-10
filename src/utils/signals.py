@@ -12,7 +12,14 @@ class SignalsForecastDataset(Dataset):
     Given a time series `X`, it divides it into smaller subsequences, and the target `y` is the `sw + 1` value that needs to be forecasted. 
     It does not consider the forecasting for the first `sw - 1` points, as they do not possess enough neighbours to form a full window.
     """
-    def __init__(self, X: torch.tensor, sw: int = 250, ss: int = 1) -> None:
+    def __init__(
+            self, 
+            X: torch.tensor, 
+            sw: int = 250, 
+            ss: int = 1,
+            in_features: t.Optional[t.List[int]] = None,
+            out_features: t.Optional[t.List[int]] = None,     
+        ) -> None:
         """
         Parameters
         ----------
@@ -22,9 +29,16 @@ class SignalsForecastDataset(Dataset):
             Sliding window size.
         ss: int
             Sliding window step size.
+        in_features: list
+            List with the indexes of the features that will be given as input to the learning model.
+        out_features: list
+            List with the indexes of the features that will be given as output of the learning model.
         """
         self.sw = sw
         self.ss = ss
+        n_features = X.shape[1]
+        self.in_features = in_features if in_features is not None else list(range(n_features))
+        self.out_features = out_features if out_features is not None else list(range(n_features))
         self.X, self.y = self.build_sliding_windows(X)
 
     def build_sliding_windows(self, X: torch.Tensor) -> t.Tuple[torch.Tensor]:
@@ -45,8 +59,8 @@ class SignalsForecastDataset(Dataset):
         X_windowed, y_windowed = [], []
 
         for t in range(0, len(X) - self.sw, self.ss):
-            X_windowed.append(X[t:t+self.sw, :])
-            y_windowed.append(X[t+self.sw, :])
+            X_windowed.append(X[t:t+self.sw, self.in_features])
+            y_windowed.append(X[t+self.sw, self.out_features])
 
         X_windowed = torch.tensor(np.array(X_windowed), dtype=torch.float32)
         y_windowed = torch.tensor(np.array(y_windowed), dtype=torch.float32)
@@ -70,7 +84,7 @@ class SignalsReconstructDataset(Dataset):
     Given a time series `X`, it divides it into smaller subsequences, and the target is to be able to reconstruct all subsequences in the dataset. 
     It does not consider the reconstruction for the first `sw - 1` points, as they do not possess enough neighbours to form a full window.
     """    
-    def __init__(self, X: torch.tensor, sw: int = 250, ss: int = 1) -> None:
+    def __init__(self, X: torch.tensor, sw: int = 100, ss: int = 1,) -> None:
         """
         Parameters
         ----------

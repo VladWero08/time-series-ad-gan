@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import typing as t
+import math
 
 
 def normalization(X: np.ndarray) -> np.ndarray:
@@ -22,6 +23,10 @@ def intervals_to_points(y_intervals: t.List[t.List], n_labels: int) -> torch.Ten
         start, end = y_interval[0], y_interval[1]
         point_labels[start:end+1] = 1
     return point_labels
+
+
+def slice_len(s: slice):
+    return max(0, math.ceil((s.stop - s.start) / s.step))
 
 
 def split(

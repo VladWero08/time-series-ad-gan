@@ -6,7 +6,7 @@ import typing as t
 from torch.utils.data import DataLoader
 
 
-from src.utils.preprocess import normalization, intervals_to_points, split
+from src.utils.preprocess import normalization, intervals_to_points, split, slice_len
 from src.utils.errors import point_wise_error
 from src.utils.evaluation import evaluate_point_anomalies, evaluate_collective_anomalies, plot_performance
 from src.utils.detection import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
@@ -17,7 +17,8 @@ class TSAD_LSTM(nn.Module):
     def __init__(
         self, 
         input_size: int, 
-        hidden_size: int = 80, 
+        output_size: int,
+        hidden_size: int = 80,
         num_layers: int = 2,
         dropout: float = 0.3,
     ) -> None:
@@ -30,7 +31,7 @@ class TSAD_LSTM(nn.Module):
             batch_first=True,
             dropout=dropout if num_layers > 1 else 0.0
         )
-        self.fc = nn.Linear(hidden_size, input_size)
+        self.fc = nn.Linear(hidden_size, output_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out, (hn, cn) = self.lstm(x)
@@ -113,6 +114,8 @@ def run_pipeline(
     y: np.ndarray,
     X_test: t.Optional[np.ndarray] = None,
     y_test: t.Optional[np.ndarray] = None,
+    in_features: list = None,
+    out_features: list = None,
     train_ratio: float = 0.60,
     val_ratio: float = 0.10,
     sw: int = 250,
@@ -149,14 +152,17 @@ def run_pipeline(
         X_test = normalization(X_test)
 
     # build sliding windows for train, val, test
-    train_ds = SignalsForecastDataset(X_train, sw, ss)
+    train_ds = SignalsForecastDataset(X_train, sw, ss, in_features, out_features)
     train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
-    val_ds   = SignalsForecastDataset(X_val,  sw, ss)
-    test_ds  = SignalsForecastDataset(X_test, sw, ss)
+    val_ds   = SignalsForecastDataset(X_val,  sw, ss, in_features, out_features)
+    test_ds  = SignalsForecastDataset(X_test, sw, ss, in_features, out_features)
 
-    # build and train the LSTM for this channel
-    _, n_features = X.shape
-    model = TSAD_LSTM(input_size=n_features, hidden_size=hidden_size, num_layers=num_layers).to(device)
+    # if the input and output features where not specify, use all features 
+    n_features = X.shape[1]
+    input_size = len(in_features) if in_features is not None else n_features
+    output_size = len(out_features) if out_features is not None else n_features
+    # build and train the LSTM for this signal
+    model = TSAD_LSTM(input_size, output_size, hidden_size, num_layers).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
     
