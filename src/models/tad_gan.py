@@ -385,9 +385,8 @@ def run_pipeline(
         print(f"Recall = {recall:.4f}")
         print(f"F1 = {f1:.4f}")
 
-        if n_features == 1:
-            # for plotting, the test samples and their predictions need to be cutoff to match the predicted labels
-            plot_performance(X=X_test[cutoff:-cutoff], X_preds=X_test_preds[cutoff:-cutoff])
+        # for plotting, the test samples and their predictions need to be cutoff to match the predicted labels
+        plot_performance(X=X_test[cutoff:-cutoff, 0], X_preds=X_test_preds[cutoff:-cutoff, 0])
 
     return precision, recall, f1
 

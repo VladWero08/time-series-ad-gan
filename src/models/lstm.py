@@ -205,9 +205,8 @@ def run_pipeline(
         print(f"Recall = {recall:.4f}")
         print(f"F1 = {f1:.4f}")
 
-        if n_features == 1:
-            # for plotting, first sw test points need to be removed no forecast was made for them
-            plot_performance(X=X_test[sw:], X_preds=X_test_preds)
+        # for plotting, first sw test points need to be removed no forecast was made for them
+        plot_performance(X=X_test[sw:, 0], X_preds=X_test_preds[:, 0])
 
     return precision, recall, f1
 
