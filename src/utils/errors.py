@@ -26,51 +26,67 @@ def area_wise_error(X_true: torch.Tensor, X_pred: torch.Tensor, l: int = 3) -> t
 
 def dtw_error(X_true: torch.Tensor, X_pred: torch.Tensor, window: int = 10) -> torch.Tensor:
     """
-    Reference: https://github.com/sintel-dev/Orion/blob/master/orion/primitives/timeseries_errors.py
+    Computes DTW error per window, per timestep, per feature.
+
+    Parameters
+    ----------
+    X_true, X_pred: torch.Tensor of shape (N, sw, features)
+
+    Returns
+    -------
+    st: torch.Tensor of shape (N, sw, features)
     """
     def dtw_distance(ts1: torch.Tensor, ts2: torch.Tensor) -> torch.Tensor:
+        """
+        Parameters
+        ----------
+        ts1, ts2: torch.Tensor of shape (sw, features)
+
+        Returns
+        -------
+        torch.Tensor of shape (sw, features)
+        """
         n, m, features = ts1.shape[0], ts2.shape[0], ts1.shape[1]
         
-        # initialize the dp matrix for dtw
         dtw_matrix = torch.full((n + 1, m + 1, features), float("inf"))
         dtw_matrix[0, 0] = 0
 
         for i in range(1, n + 1):
             for j in range(1, m + 1):
-                # reconstruction error of the current point
-                diff = abs(ts1[i - 1] - ts2[j - 1])
-                # lowest error from previous time-series data
+                diff = (ts1[i - 1] - ts2[j - 1]).abs()
                 min_ = torch.min(
                     torch.stack([
-                        dtw_matrix[i - 1, j], 
-                        dtw_matrix[i, j - 1], 
+                        dtw_matrix[i - 1, j],
+                        dtw_matrix[i, j - 1],
                         dtw_matrix[i - 1, j - 1]
                     ]), dim=0
                 ).values
                 dtw_matrix[i, j] = diff + min_
 
-        return dtw_matrix[n, m]
+        return dtw_matrix[1:, 1:]  # (sw, features)
 
-    length_dtw = (window // 2) * 2 + 1
-    half_len = length_dtw // 2
-    T = X_true.shape[0]
+    N, sw, features = X_true.shape
+    st = torch.zeros(N, sw, features, device=X_true.device)
+    dtw_len = (window // 2) * 2 + 1
+    dtw_half_len = dtw_len // 2
 
-    # pad inputs with zeros    
-    pad_shape = (0, 0, half_len, half_len)
-    X_true_pad = torch.nn.functional.pad(X_true, pad_shape, mode='constant', value=0.0)
-    X_pred_pad = torch.nn.functional.pad(X_pred, pad_shape, mode='constant', value=0.0)
-    
-    st = torch.zeros(X_true.shape, device=X_true.device)
-    
-    # calculate local DTW within the window step-by-step
-    for i in range(T - length_dtw + 1):
-        true_window = X_true_pad[i : i + length_dtw]
-        pred_window = X_pred_pad[i : i + length_dtw]
+    # pad the sw dimension for each window: (N, sw, features) -> (N, sw + 2*dtw_half_len, features)
+    X_true_pad = torch.nn.functional.pad(X_true, (0, 0, dtw_half_len, dtw_half_len), mode='constant', value=0.0)
+    X_pred_pad = torch.nn.functional.pad(X_pred, (0, 0, dtw_half_len, dtw_half_len), mode='constant', value=0.0)
+
+    for i in range(N):
+        # local DTW within the window step-by-step along sw
+        window_errors = torch.zeros(sw, features, device=X_true.device)
         
-        # center point index 
-        target_idx = i + half_len
-        st[target_idx] = dtw_distance(true_window, pred_window)
-        
+        for t in range(sw - dtw_len + 1):
+            true_window = X_true_pad[i, t:t+dtw_len]   # (dtw_len, features)
+            pred_window = X_pred_pad[i, t:t+dtw_len]   # (dtw_len, features)
+            target_idx = t + dtw_half_len
+
+            window_errors[target_idx] = dtw_distance(true_window, pred_window)[dtw_half_len, dtw_half_len]
+
+        st[i] = window_errors
+
     return st
 
 
@@ -230,3 +246,10 @@ def gradient_penalty(d, real: torch.Tensor, fake: torch.Tensor, device: str) -> 
     gp = ((gradient_norm - 1) ** 2).mean()
 
     return gp
+
+
+if __name__ == "__main__":
+    x = torch.Tensor(np.random.random((10, 20, 3)))
+    y = torch.Tensor(np.random.random((10, 20, 3)))
+
+    print(dtw_error(x, y).shape)
