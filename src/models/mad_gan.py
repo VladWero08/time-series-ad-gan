@@ -6,7 +6,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 
 from src.utils.preprocess import normalization, intervals_to_points, split, agg_reconstructions
-from src.utils.errors import point_wise_error, gradient_penalty, agg_reconstruction_errors, agg_gan_errors
+from src.utils.errors import point_wise_error, area_wise_error, dtw_error, gradient_penalty, agg_gan_errors
 from src.utils.evaluation import evaluate_point_anomalies, evaluate_collective_anomalies, plot_performance
 from src.utils.detection import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
 from src.utils.signals import SignalsReconstructDataset
@@ -229,20 +229,19 @@ def run_pipeline(
     y: np.ndarray,
     X_test: t.Optional[np.ndarray] = None,
     y_test: t.Optional[np.ndarray] = None,
-    train_ratio: float = 0.7,
+    train_ratio: float = 0.6,
     sw: int = 100,
     ss: int = 1,
     latent_size: int = 20,
-    epochs: int = 50,
+    epochs: int = 2000,
     batch_size: int = 64,
     n_critics: int = 5,
     lr_g: float = 1e-5,
     lr_d: float = 1e-5,
-    rec_error_func: t.Callable = point_wise_error,
     device: str = "cpu",
     anomaly_type: str = "point",
     plot: bool = False,
-) -> t.Tuple[float, float, float]:
+) -> t.Dict[str, t.List]:
     if X_test is None or y_test is None:
         val_ratio = 0
         X_train, y_train, X_test, y_test = split(X, y, sw, train_ratio, val_ratio, type="reconstruct")
@@ -271,38 +270,50 @@ def run_pipeline(
     model.g.eval()
     model.d.eval()
 
-    X_test_preds, y_test_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
-    y_test_anomaly_scores = y_test_anomaly_scores[cutoff:-cutoff]
+    # for mad-gan, the errors for all aggregation functions will be computed
+    metrics = {"point": [], "area": [], "dtw": []}
+    rec_error_funcs = [
+        (point_wise_error, "point"), 
+        (area_wise_error, "area"), 
+        (dtw_error, "dtw")
+    ]
 
-    match anomaly_type:
-        case "point":
-            # compute the forecasting errors for the train set
-            _, y_train_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
-            # compute the test labels based on the forecasting errors obtained in training
-            y_test_hat = detect_point_anomalies(y_train_anomaly_scores, y_test_anomaly_scores)
+    for rec_error_func, rec_error_func_name in rec_error_funcs:
+        X_test_preds, y_test_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
+        y_test_anomaly_scores = y_test_anomaly_scores[cutoff:-cutoff]
 
-            precision, recall, f1 = evaluate_point_anomalies(y_test, y_test_hat)
-        case "contextual":
-            # compute the test anomaly sequences from test labels 
-            y_test_intervals = get_anomaly_intervals(y_test)
-            # compute the test anomaly sequences from test forecast errors
-            y_test_hat_intervals = detect_contextual_anomalies(y_test_anomaly_scores)
-            y_test_labels = intervals_to_points(y_test_hat_intervals, y_test.shape[0])
+        match anomaly_type:
+            case "point":
+                # compute the forecasting errors for the train set
+                _, y_train_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
+                # compute the test labels based on the forecasting errors obtained in training
+                y_test_hat = detect_point_anomalies(y_train_anomaly_scores, y_test_anomaly_scores)
 
-            precision, recall, f1 = evaluate_collective_anomalies(y_test_intervals, y_test_hat_intervals)
+                precision, recall, f1 = evaluate_point_anomalies(y_test, y_test_hat)
+            case "contextual":
+                # compute the test anomaly sequences from test labels 
+                y_test_intervals = get_anomaly_intervals(y_test)
+                # compute the test anomaly sequences from test forecast errors
+                y_test_hat_intervals = detect_contextual_anomalies(y_test_anomaly_scores)
+                y_test_labels = intervals_to_points(y_test_hat_intervals, y_test.shape[0])
+
+                precision, recall, f1 = evaluate_collective_anomalies(y_test_intervals, y_test_hat_intervals)
+        
+        metrics[rec_error_func_name] = [precision, recall, f1]
+
+        if plot:
+            print()
+            print(f"Metrics {rec_error_func_name}")
+            print("-------")
+            print(f"Precision = {precision:.4f}")
+            print(f"Recall = {recall:.4f}")
+            print(f"F1 = {f1:.4f}")
 
     if plot:
-        print()
-        print("Metrics")
-        print("-------")
-        print(f"Precision = {precision:.4f}")
-        print(f"Recall = {recall:.4f}")
-        print(f"F1 = {f1:.4f}")
-
         # for plotting, the test samples and their predictions need to be cutoff to match the predicted labels
         plot_performance(X=X_test[cutoff:-cutoff, 0], X_preds=X_test_preds[cutoff:-cutoff, 0])
 
-    return precision, recall, f1
+    return metrics
 
 
 if __name__ == "__main__":
