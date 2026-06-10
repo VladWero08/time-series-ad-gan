@@ -64,8 +64,9 @@ def split(
             - If train and validation consume the whole series: (X_train, y_train, X_val, y_val)
         """
         T = X.shape[0]
-        train_end = int(T * train_ratio)
-        val_end   = int(T * (train_ratio + val_ratio))
+        val_size = int(T * val_ratio)
+        train_end = int(T * train_ratio - max(0, sw + 1 - val_size))
+        val_end = int(train_end + max(sw + 1, val_size))
         has_val = val_ratio > 0.0
         has_test = (train_ratio + val_ratio) < 1.0
 
@@ -93,3 +94,14 @@ def split(
                 data_splits.append(X_split); data_splits.append(y_split)
 
         return tuple(data_splits)
+
+
+if __name__ == "__main__":
+    x = np.zeros((900, 1))
+    y = np.zeros(900)
+
+    X_train, y_train, X_val, y_val, X_test, y_test = split(x, y, sw=100)
+
+    print(X_train.shape)
+    print(X_val.shape)
+    print(X_test.shape)
