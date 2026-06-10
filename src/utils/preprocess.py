@@ -101,6 +101,47 @@ def split(
         return tuple(data_splits)
 
 
+def agg_reconstructions(X_rec: torch.Tensor, sw: int, ss: int) -> torch.Tensor:
+    """
+    Aggregates sliding window reconstruction to a per-timestep error by computing the median over all windows that contain each timestep.
+
+    Parameters
+    ----------
+    reconstruction_errors : torch.Tensor
+        Reconstruction error per window and per position within that window.
+    sw : int
+        Sliding window size.
+    ss : int
+        Sliding window step size.
+
+    Returns
+    -------
+    agg_errors : torch.Tensor of shape (T, features)
+        Median aggregated error value for each original timestep.
+    """
+    N = X_rec.shape[0]
+    T = (N - 1) * ss + sw
+    agg_errors = []
+
+    for i in range(T):
+        # window k covers:                   [k * ss, k * ss + sw - 1]
+        # window k contains timestep i if:   k * ss <= i <= k * ss + sw - 1
+        # the inequality based on k:         (i - sw + 1) / ss <= k <= i / ss 
+        k_min = max(0, int(np.ceil((i - sw + 1) / ss)))
+        k_max = min(N - 1, int(np.floor(i / ss)))
+
+        # position i in window k is at i-k*ss
+        errors_at_i = torch.stack([
+            X_rec[k, i - k * ss]
+            for k in range(k_min, k_max + 1)
+        ])
+        median_error = torch.mean(errors_at_i, dim=0)
+        agg_errors.append(median_error)
+
+    return torch.stack(agg_errors)
+
+
+
 if __name__ == "__main__":
     x = np.zeros((900, 1))
     y = np.zeros(900)
@@ -110,3 +151,7 @@ if __name__ == "__main__":
     print(X_train.shape)
     print(X_val.shape)
     print(X_test.shape)
+
+    x_rec = torch.tensor(np.random.random((1000, 100, 5)))
+    x_pred = agg_reconstructions(x_rec, sw=100, ss=1)
+    print(x_pred.shape)
