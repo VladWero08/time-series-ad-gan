@@ -32,6 +32,7 @@ class TSAD_LSTM(nn.Module):
             dropout=dropout if num_layers > 1 else 0.0
         )
         self.fc = nn.Linear(hidden_size, output_size)
+        self._init_weights()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out, (hn, cn) = self.lstm(x)
@@ -39,6 +40,20 @@ class TSAD_LSTM(nn.Module):
         out = self.fc(out)
 
         return out
+    
+    def _init_weights(self) -> None:
+        for _, module in self.named_modules():
+            if isinstance(module, (nn.LSTM, nn.GRU)):
+                for param_name, param in module.named_parameters():
+                    if "weight_ih" in param_name:
+                        nn.init.xavier_uniform_(param.data)
+                    elif "weight_hh" in param_name:
+                        nn.init.orthogonal_(param.data)
+
+            elif isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight.data)
+                if module.bias is not None:
+                    module.bias.data.fill_(0.0)
 
 
 def train(

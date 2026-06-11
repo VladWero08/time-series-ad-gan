@@ -38,6 +38,7 @@ class TSAD_LSTM_AE(nn.Module):
         )
 
         self.fc = nn.Linear(latent_size, input_size)
+        # self._init_weights()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         encoder_out, (hn, cn) = self.encoder(x)
@@ -45,6 +46,20 @@ class TSAD_LSTM_AE(nn.Module):
         out = self.fc(decoder_out)
 
         return out
+    
+    def _init_weights(self) -> None:
+        for _, module in self.named_modules():
+            if isinstance(module, (nn.LSTM, nn.GRU)):
+                for param_name, param in module.named_parameters():
+                    if "weight_ih" in param_name:
+                        nn.init.xavier_uniform_(param.data)
+                    elif "weight_hh" in param_name:
+                        nn.init.orthogonal_(param.data)
+
+            elif isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight.data)
+                if module.bias is not None:
+                    module.bias.data.fill_(0.0)
 
 
 def train(
