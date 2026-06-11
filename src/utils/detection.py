@@ -133,13 +133,12 @@ def detect_contextual_anomalies(
 
     for i in range(0, T - threshold_sw + 1, threshold_ss):
         window = anomaly_scores[i:i+threshold_sw]
-        window_mean = torch.mean(window)
-        window_std = torch.std(window) + 1e-8
+        threshold = torch.quantile(window, 0.995)
         # use time-series size as labels size for easier index manipulation
         window_anomaly_labels = torch.zeros((T,))
 
         for j, anomaly_score in enumerate(window):
-            is_anomaly = int((anomaly_score > (window_mean + max_std * window_std)).item())
+            is_anomaly = int((anomaly_score > threshold).item())
             window_anomaly_labels[i + j] = is_anomaly
 
         # merge the point anomalies into collective anomalies
