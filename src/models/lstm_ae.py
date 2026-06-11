@@ -15,9 +15,8 @@ class TSAD_LSTM_AE(nn.Module):
     def __init__(
         self, 
         input_size: int = 1, 
-        latent_size: int = 20,
+        latent_size: int = 80,
         num_layers: int = 2, 
-        dropout: float = 0.3,
     ) -> None:
         super().__init__()
 
@@ -26,7 +25,6 @@ class TSAD_LSTM_AE(nn.Module):
             hidden_size=latent_size,
             num_layers=num_layers,
             batch_first=True,
-            dropout=dropout if num_layers > 1 else 0.0
         ) 
 
         self.decoder = nn.LSTM(
@@ -34,15 +32,15 @@ class TSAD_LSTM_AE(nn.Module):
             hidden_size=latent_size,
             num_layers=num_layers,
             batch_first=True,
-            dropout=dropout if num_layers > 1 else 0.0
         )
 
         self.fc = nn.Linear(latent_size, input_size)
-        # self._init_weights()
+        self._init_weights()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        encoder_out, (hn, cn) = self.encoder(x)
-        decoder_out, (_, _) = self.decoder(encoder_out, (hn, cn))
+        _, (hn, cn) = self.encoder(x)
+        decoder_input = hn[-1].unsqueeze(1).repeat(1, x.shape[1], 1)
+        decoder_out, (_, _) = self.decoder(decoder_input, (hn, cn))
         out = self.fc(decoder_out)
 
         return out
@@ -69,7 +67,7 @@ def train(
     optimizer,
     criterion,
     epochs: int = 50,
-    patience: int = 10,
+    patience: int = 20,
     min_delta: float = 3e-4,
     device: str = "cpu"
 ) -> TSAD_LSTM_AE:
@@ -145,12 +143,12 @@ def run_pipeline(
     val_ratio: float = 0.10,
     sw: int = 100,
     ss: int = 1,
-    latent_size: int = 20,
+    latent_size: int = 80,
     num_layers: int = 2,
-    epochs: int = 35,
+    epochs: int = 50,
     batch_size: int = 64,
     lr: float = 1e-4,
-    patience: int = 10,
+    patience: int = 20,
     device: str = "cpu",
     anomaly_type: str = "point",
     plot: bool = False,
@@ -207,9 +205,15 @@ def run_pipeline(
     match anomaly_type:
         case "point":
             # compute the forecasting errors for the train set
-            _, y_train_errors = test(model, train_ds, sw=sw, ss=ss, device=device)
+            X_train_preds, y_train_errors = test(model, train_ds, sw=sw, ss=ss, device=device)
             # compute the test labels based on the forecasting errors obtained in training
             y_test_hat = detect_point_anomalies(y_train_errors, y_test_errors)
+
+            import matplotlib.pyplot as plt
+            plt.figure(figsize=(15, 4))
+            plt.plot(X_train_preds)
+            plt.plot(X_train)
+            plt.show()
 
             precision, recall, f1 = evaluate_point_anomalies(y_test, y_test_hat)
         case "contextual":
