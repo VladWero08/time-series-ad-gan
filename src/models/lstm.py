@@ -65,7 +65,8 @@ def train(
     epochs: int = 35,
     patience: int = 10,
     min_delta: float = 3e-4,
-    device: str = "cpu"
+    device: str = "cpu",
+    verbose: bool = True,
 ) -> TSAD_LSTM:
     patience_counter = 0
     best_val_loss = float("inf")
@@ -93,7 +94,7 @@ def train(
             val_loss = criterion(val_pred, val_ds.y.to(device)).item()
 
         # metrics
-        if (epoch + 1) % 5 == 0:
+        if verbose and (epoch + 1) % 5 == 0:
             print(f"Epoch {epoch+1:3d} | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f}")
 
         # early stopping
@@ -104,7 +105,8 @@ def train(
         else:
             patience_counter += 1
             if patience_counter >= patience:
-                print(f"Early stopping at epoch {epoch+1}")
+                if verbose:
+                    print(f"Early stopping at epoch {epoch+1}")
                 break
 
     model.load_state_dict(best_weights)
@@ -143,7 +145,7 @@ def run_pipeline(
     patience: int = 10,
     device: str = "cpu",
     anomaly_type: str = "point",
-    plot: bool = False,
+    verbose: bool = True,
 ) -> t.Tuple[float, float, float]:
     """
     Full anomaly detection pipeline for a multivariate time series.
@@ -189,7 +191,8 @@ def run_pipeline(
         criterion=criterion,
         epochs=epochs, 
         patience=patience,
-        device=device
+        device=device,
+        verbose=verbose,
     )
 
     # compute the forecasting errors for the test set
@@ -212,7 +215,7 @@ def run_pipeline(
 
             precision, recall, f1 = evaluate_collective_anomalies(y_test_intervals, y_test_hat_intervals)
 
-    if plot:
+    if verbose:
         print()
         print("Metrics")
         print("-------")

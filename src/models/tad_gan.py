@@ -167,6 +167,7 @@ def train(
     lr_dz: float = 1e-5,
     beta1: float = 0.5,
     device: str = "cpu",
+    verbose: bool = True,
 ) -> None:
     optim_gg = optim.Adam(tadgan.gg.parameters(), lr=lr_gg, betas=(beta1, 0.999))
     optim_gf = optim.Adam(tadgan.gf.parameters(), lr=lr_gf, betas=(beta1, 0.999))
@@ -278,7 +279,7 @@ def train(
         loss_dx_epoch /= (len(train_dl) * n_critics) 
         loss_dz_epoch /= (len(train_dl) * n_critics) 
 
-        if (epoch + 1) % 5 == 0:
+        if verbose and (epoch + 1) % 5 == 0:
             print(f"Epoch {epoch+1:3d} | GG Loss: {loss_gg_epoch:.6f} | GF Loss: {loss_gf_epoch:.6f} | FC Loss: {loss_fc_epoch:.6f} | DX Loss: {loss_dx_epoch:.6f} | DZ Loss: {loss_dz_epoch:.6f}")
 
 
@@ -325,7 +326,7 @@ def run_pipeline(
     lr_dz: float = 1e-5,
     device: str = "cpu",
     anomaly_type: str = "point",
-    plot: bool = False,
+    verbose: bool = True,
 ) -> t.Tuple[float, float, float]:
     if X_test is None or y_test is None:
         val_ratio = 0
@@ -386,7 +387,7 @@ def run_pipeline(
 
         metrics[rec_error_func_name] = [precision, recall, f1]
 
-        if plot:
+        if verbose:
             print()
             print(f"Metrics {rec_error_func_name}")
             print("-------")
@@ -394,7 +395,7 @@ def run_pipeline(
             print(f"Recall = {recall:.4f}")
             print(f"F1 = {f1:.4f}")
 
-    if plot:
+    if verbose:
         # for plotting, the test samples and their predictions need to be cutoff to match the predicted labels
         plot_performance(X=X_test[cutoff:-cutoff, 0], X_preds=X_test_preds[cutoff:-cutoff, 0])
 
