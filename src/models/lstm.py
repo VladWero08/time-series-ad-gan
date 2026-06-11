@@ -59,7 +59,8 @@ class TSAD_LSTM(nn.Module):
 def train(
     model: TSAD_LSTM,
     train_dl: SignalsForecastDataset,
-    val_ds: SignalsForecastDataset,
+    val_dl: DataLoader,
+    val_ds_y: torch.Tensor,
     optimizer,
     criterion,
     epochs: int = 35,
@@ -89,9 +90,15 @@ def train(
 
         # validate
         model.eval()
+        val_loss = 0.0
         with torch.no_grad():
-            val_pred = model(val_ds.X.to(device))
-            val_loss = criterion(val_pred, val_ds.y.to(device)).item()
+            for xb, yb in val_dl:
+                xb, yb = xb.to(device), yb.to(device)
+                batch_pred = model(xb)
+                loss = criterion(batch_pred, yb)
+                val_loss += loss.item()
+                
+            val_loss /= len(val_dl)
 
         # metrics
         if verbose and (epoch + 1) % 5 == 0:
@@ -115,13 +122,22 @@ def train(
 
 def test(
     model: TSAD_LSTM,
-    ds: SignalsForecastDataset,
+    dl: DataLoader,
+    ds_y: torch.Tensor,
     device: str = "cpu",
 ) -> t.Tuple[torch.Tensor]:
     model.eval()
+    preds_list = []
+    
     with torch.no_grad():
-        ds_preds = model(ds.X.to(device)).cpu()
-        ds_errors = point_wise_error(ds.y, ds_preds)
+        for xb, _ in dl:
+            xb = xb.to(device)
+            batch_preds = model(xb).cpu()
+            preds_list.append(batch_preds)
+            
+    # Concatenate along the batch dimension to maintain chronological sequence
+    ds_preds = torch.cat(preds_list, dim=0)
+    ds_errors = point_wise_error(ds_y, ds_preds)
 
     return ds_preds, ds_errors
 
@@ -170,9 +186,11 @@ def run_pipeline(
 
     # build sliding windows for train, val, test
     train_ds = SignalsForecastDataset(X_train, sw, ss, in_features, out_features)
-    train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+    train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=False)
     val_ds   = SignalsForecastDataset(X_val,  sw, ss, in_features, out_features)
+    val_dl   = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
     test_ds  = SignalsForecastDataset(X_test, sw, ss, in_features, out_features)
+    test_dl  = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
 
     # if the input and output features where not specify, use all features 
     n_features = X.shape[1]
@@ -186,7 +204,8 @@ def run_pipeline(
     model = train(
         model, 
         train_dl, 
-        val_ds, 
+        val_dl,
+        val_ds.y, 
         optimizer=optimizer,
         criterion=criterion,
         epochs=epochs, 
@@ -196,12 +215,12 @@ def run_pipeline(
     )
 
     # compute the forecasting errors for the test set
-    X_test_preds, y_test_errors = test(model, test_ds, device)
+    X_test_preds, y_test_errors = test(model, test_dl, test_ds.y, device)
 
     match anomaly_type:
         case "point":
             # compute the forecasting errors for the train set
-            _, y_train_errors = test(model, train_ds, device)
+            _, y_train_errors = test(model, train_dl, train_ds.y, device)
             # compute the test labels based on the forecasting errors obtained in training
             y_test_hat = detect_point_anomalies(y_train_errors, y_test_errors)
 
@@ -251,5 +270,5 @@ if __name__ == "__main__":
         batch_size=64,
         device="cuda" if torch.cuda.is_available() else "cpu",
         anomaly_type="contextual",
-        plot=True,
+        verbose=True,
     )
