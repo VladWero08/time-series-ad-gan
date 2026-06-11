@@ -4,10 +4,8 @@ import typing as t
 import math
 
 
-def normalization(X: np.ndarray) -> np.ndarray:
+def normalization(X: np.ndarray, X_min: np.ndarray, X_max: np.ndarray) -> np.ndarray:
     """Min-max normalization to [-1, 1]."""
-    X_min = X.min(axis=0)
-    X_max = X.max(axis=0)
     X_normalized = 2 * (X - X_min) / (X_max - X_min + 1e-8) - 1
     return X_normalized
 
@@ -94,7 +92,7 @@ def split(
 
         for active, data_slice in data_slices:
             if active:
-                X_split = normalization(X[data_slice])
+                X_split = X[data_slice]
                 y_split = y[data_slice][y_slice]
                 data_splits.append(X_split); data_splits.append(y_split)
 

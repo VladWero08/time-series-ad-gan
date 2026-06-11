@@ -182,8 +182,13 @@ def run_pipeline(
     else:
         train_ratio = 1 - val_ratio
         X_train, y_train, X_val, y_val = split(X, y, sw, train_ratio, val_ratio, type="forecast")
-        X_test = normalization(X_test)
         y_test = y_test[sw:]
+
+    # normalization of the data
+    X_train_min, X_train_max = X_train.min(axis=0), X_train.max(axis=0)
+    X_train = normalization(X_train, X_train_min, X_train_max)
+    X_val = normalization(X_val, X_train_min, X_train_max)
+    X_test = normalization(X_test, X_train_min, X_train_max)
 
     # build sliding windows for train, val, test
     train_ds = SignalsForecastDataset(X_train, sw, ss, in_features, out_features)

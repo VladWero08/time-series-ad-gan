@@ -248,9 +248,13 @@ def run_pipeline(
         val_ratio = 0
         X_train, y_train, X_test, y_test = split(X, y, sw, train_ratio, val_ratio, type="reconstruct")
     else:
-        X_train, y_train = normalization(X), y
-        X_test = normalization(X_test)
+        X_train, y_train = X, y
         y_test = y_test[cutoff:-cutoff]
+
+    # normalization of the data
+    X_train_min, X_train_max = X_train.min(axis=0), X_train.max(axis=0)
+    X_train = normalization(X_train, X_train_min, X_train_max)
+    X_test = normalization(X_test, X_train_min, X_train_max)
 
     # build sliding windows for train, val, test
     train_ds = SignalsReconstructDataset(X_train, sw=sw, ss=ss)

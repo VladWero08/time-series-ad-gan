@@ -3,13 +3,17 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import pmdarima as pm
+import typing as t
 
 from statsmodels.tsa.arima_process import arma_generate_sample
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.statespace.varmax import VARMAX
 from scipy.fft import fft
 
-from src.models.utils import detect_point_anomalies
+from src.utils.detection import detect_point_anomalies
+from orion import Orion
+from orion.data import load_signal
+
 
 def fft_period(signal: np.array) -> int:
     """
@@ -146,84 +150,43 @@ def varima(ts_size: int = 100, ts_attrs: int = 3):
     plt.show()
 
 
+from src.utils.preprocess import split_df
+
 def run_pipeline(
-    X: np.ndarray,
+    arima: Orion,
+    X: pd.DataFrame,
+    y: np.ndarray,
+    X_test: t.Optional[np.ndarray] = None,
+    y_test: t.Optional[np.ndarray] = None,
     train_ratio: float = 0.70,
+    sw: int = 250,
+    ss: int = 1,
+    anomaly_type: str = "point",
+    verbose: bool = True,
 ):
-    T, n_attrs = X.shape
-    train_end = int(T * train_ratio)
-
-    X_train = X[:train_end]
-    X_test  = X[train_end:]
-
-    print(f"Series shape : {X.shape}")
-    print(f"Train        : timesteps 0 -> {train_end}  ({train_end} steps)")
-    print(f"Test         : timesteps {train_end} -> {T}  ({T - train_end} steps)\n")
-
-    all_train_errors = []
-    all_test_errors  = []
-
-    for attr in range(n_attrs):
-        print(f"Attribute {attr + 1}/{n_attrs}")
-
-        train_signal = X_train[:, attr]
-        test_signal  = X_test[:, attr]
-
-        # find dominant period and fit on train
-        m = fft_period(train_signal)
-        print(f"Periodicity = {m}")
-
-        print("[START] ARIMA Model Fitting...")
-        model = ARIMA(train_signal, order=(1, 1, 1)).fit()
-        print("[END] ARIMA Model Fitting!")
-
-        # train errors: in-sample fitted values vs actuals
-        train_errors = np.abs(train_signal - model.fittedvalues)
-
-        # test errors: walk-forward — predict 1 step, then update with true value
-        # this mirrors exactly what SignalsForecastDataset does with sliding windows
-        test_preds  = []
-        test_errors = []
-
-        # walk-forward: grow history by one true value at each step
-        history     = list(train_signal)
-        test_errors = []
-
-        print("[START] Prediction and update...")
-        for t in range(len(test_signal)):
-            pred = ARIMA(history, order=(1, 1, 1)).fit().forecast(steps=1)[0]
-            err  = abs(test_signal[t] - pred)
-
-            test_errors.append(err)
-            history.append(test_signal[t])
-        print("[END] Prediction and update!\n")
-
-        all_train_errors.append(torch.tensor(train_errors, dtype=torch.float32))
-        all_test_errors.append(torch.tensor(test_errors,   dtype=torch.float32))
-
-    # aggregate errors across attributes (mean per timestep)
-    train_errors_agg = torch.stack(all_train_errors, dim=1).mean(dim=1)
-    test_errors_agg  = torch.stack(all_test_errors,  dim=1).mean(dim=1)
-
-    y_test_labels      = detect_point_anomalies(train_errors_agg, test_errors_agg)
-    y_test_anomaly_idx = torch.where(y_test_labels == 1)[0]
-    X_test_plot        = torch.tensor(X_test[:, 0], dtype=torch.float32)
-
-    plt.figure(figsize=(10, 5))
-    plt.plot(test_errors_agg,  color="orange", label="Reconstruction Error")
-    plt.plot(X_test_plot,      color="blue",   label="Original")
-    plt.scatter(y_test_anomaly_idx, X_test_plot[y_test_anomaly_idx], color="red", s=10, label="Anomaly")
-    plt.legend()
-    plt.show()
+    if X_test is None or y_test is None:
+        X_train, y_train, X_val, y_val, X_test, y_test = split_df(X, y, sw, train_ratio, val_ratio, type="forecast")
+    else:
+        train_ratio = 1 - val_ratio
+        X_train, y_train, X_val, y_val = split(X, y, sw, train_ratio, val_ratio, type="forecast")
+        X_test = normalization(X_test)
+        y_test = y_test[sw:]
 
 
 if __name__ == "__main__":
-    np.random.seed(999)
 
-    T, n_attrs = 2000, 1
-    ts = np.random.randn(T, n_attrs).cumsum(axis=0) * 0.1
-    # inject a spike anomaly
-    ts[1790:1810] += 15.0
+    train = load_signal("D-14-train")[:500]
+    test = load_signal("D-14-test")
 
-    run_pipeline(ts, train_ratio=0.70)
+    hyperparameters = {
+        "orion.primitives.timeseries_anomalies.find_anomalies#1": {
+            "window_size": 100,
+            "window_step_size": 1
+        }
+    }
 
+    orion = Orion(pipeline='arima', hyperparameters=hyperparameters)
+    print("Started to fit...")
+    orion.fit(train)
+    print("Started to detect...")
+    anomalies = orion.detect(test)

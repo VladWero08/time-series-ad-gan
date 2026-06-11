@@ -3,13 +3,11 @@ import torch
 import torch.nn as nn
 import typing as t
 from torch.utils.data import DataLoader
-
 from src.utils.preprocess import normalization, intervals_to_points, split, agg_reconstructions
 from src.utils.errors import point_wise_error, agg_reconstruction_errors
 from src.utils.evaluation import evaluate_point_anomalies, evaluate_collective_anomalies, plot_performance
 from src.utils.detection import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
 from src.utils.signals import SignalsReconstructDataset
-
 
 class TSAD_LSTM_AE(nn.Module):
     def __init__(
@@ -175,8 +173,13 @@ def run_pipeline(
     else:
         train_ratio = 1 - val_ratio
         X_train, y_train, X_val, y_val = split(X, y, sw, train_ratio, val_ratio, type="reconstruct")
-        X_test = normalization(X_test)
         y_test = y_test[cutoff:-cutoff]
+
+    # normalization of the data
+    X_train_min, X_train_max = X_train.min(axis=0), X_train.max(axis=0)
+    X_train = normalization(X_train, X_train_min, X_train_max)
+    X_val = normalization(X_val, X_train_min, X_train_max)
+    X_test = normalization(X_test, X_train_min, X_train_max)
 
     # build sliding windows for train, val, test
     train_ds = SignalsReconstructDataset(X_train, sw=sw, ss=ss)
