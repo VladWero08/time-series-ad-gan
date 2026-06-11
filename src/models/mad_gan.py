@@ -243,18 +243,19 @@ def run_pipeline(
     anomaly_type: str = "point",
     verbose: bool = True,
 ) -> t.Dict[str, t.List]:
+    cutoff = sw // 2
     if X_test is None or y_test is None:
         val_ratio = 0
         X_train, y_train, X_test, y_test = split(X, y, sw, train_ratio, val_ratio, type="reconstruct")
     else:
         X_train, y_train = normalization(X), y
         X_test = normalization(X_test)
+        y_test = y_test[cutoff:-cutoff]
 
     # build sliding windows for train, val, test
     train_ds = SignalsReconstructDataset(X_train, sw=sw, ss=ss)
     train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
     test_ds  = SignalsReconstructDataset(X_test, sw=sw, ss=ss)
-    cutoff = sw // 2
 
     # build and train discriminator and generator
     _, n_features = X.shape
