@@ -165,7 +165,7 @@ def find_best_latent(
     g: Generator,
     signal_size: int = 100,
     latent_size: int = 20,
-    iters: int = 1000,
+    iters: int = 200,
     lr: float = 1e-2,
     device: str = "cpu"
 ) -> torch.Tensor:
@@ -229,11 +229,11 @@ def test(
             
     with torch.no_grad():
         X_rec = torch.cat(X_rec, dim=0)
-        X_rec = agg_reconstructions(X_rec, sw, ss)
+        X_rec = agg_reconstructions(X_rec, sw, ss).cpu()
 
-        disc_scores = torch.cat(disc_scores, dim=0)
+        disc_scores = torch.cat(disc_scores, dim=0).cpu()
         rec_errors = {
-            name: torch.cat(rec_error, dim=0) 
+            name: torch.cat(rec_error, dim=0).cpu()
             for name, rec_error in rec_errors.items()
         }
         anomaly_scores = {
@@ -298,8 +298,8 @@ def run_pipeline(
     model.d.eval()
 
     # for mad-gan, the errors for all aggregation functions will be computed
-    metrics = {"point": [], "area": []}
-    rec_error_funcs = [("point", point_wise_error), ("area", area_wise_error)]
+    metrics = {"point": [], "area": [], "dtw": []}
+    rec_error_funcs = [("point", point_wise_error), ("area", area_wise_error), ("dtw", dtw_error)]
 
     # infer the model for test data
     X_test_preds, y_test_anomaly_scores = test(model, test_dl, sw=sw, ss=ss, rec_error_funcs=rec_error_funcs, device=device)
