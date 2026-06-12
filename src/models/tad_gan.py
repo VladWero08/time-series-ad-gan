@@ -161,10 +161,10 @@ def train(
     n_critics: int = 5,
     lambda_gp: float = 10.0,
     lambda_fc: float = 10.0,
-    lr_gg: float = 1e-5,
-    lr_gf: float = 1e-5,
-    lr_dx: float = 1e-5,
-    lr_dz: float = 1e-5,
+    lr_gg: float = 1e-6,
+    lr_gf: float = 1e-6,
+    lr_dx: float = 1e-6,
+    lr_dz: float = 1e-6,
     beta1: float = 0.5,
     device: str = "cpu",
     verbose: bool = True,
@@ -302,7 +302,7 @@ def test(
         for xb in dl:
             xb = xb.to(device)
             # X -> G(X) -> F(G(X))
-            xb_rec = model.gf(model.gg(xb))
+            xb_rec = model.gf(model.gg(xb)).detach()
             xb_disc_scores = model.dx(xb_rec)
 
             for name, error_func in rec_error_funcs:
@@ -314,11 +314,11 @@ def test(
 
     # concatenate along the batch dimension to maintain chronological sequence
     X_rec = torch.cat(X_rec, dim=0)
-    X_rec = agg_reconstructions(X_rec, sw, ss)
+    X_rec = agg_reconstructions(X_rec, sw, ss).cpu()
 
-    disc_scores = torch.cat(disc_scores, dim=0)
+    disc_scores = torch.cat(disc_scores, dim=0).cpu()
     rec_errors = {
-        name: torch.cat(rec_error, dim=0) 
+        name: torch.cat(rec_error, dim=0).cpu() 
         for name, rec_error in rec_errors.items()
     }
     anomaly_scores = {
@@ -339,6 +339,7 @@ def run_pipeline(
     ss: int = 1,
     latent_size: int = 20,
     epochs: int = 2000,
+    rec_error_funcs: t.List[t.Tuple[str, t.Callable]] = [("point", point_wise_error)],
     batch_size: int = 64,
     n_critics: int = 5,
     lr_gg: float = 1e-6,
@@ -383,10 +384,7 @@ def run_pipeline(
     )
     model.gg.eval(); model.gf.eval(); model.dx.eval(); model.dz.eval()
 
-    # for tad-gan, the errors for all aggregation functions will be computed
-    metrics = {"point": [], "area": []}
-    rec_error_funcs = [("point", point_wise_error), ("area", area_wise_error)]
-
+    metrics = {name: [] for name, _ in rec_error_funcs}
     # infer the model for test data
     X_test_preds, y_test_anomaly_scores = test(model, test_dl, sw=sw, ss=ss, rec_error_funcs=rec_error_funcs, device=device)
     y_test_anomaly_scores = {name: rec_error[cutoff:-cutoff] for name, rec_error in y_test_anomaly_scores.items()}
