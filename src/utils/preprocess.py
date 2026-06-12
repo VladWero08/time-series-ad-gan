@@ -67,12 +67,13 @@ def split(
             - If train and validation consume the whole series: (X_train, y_train, X_val, y_val)
         """
         T = X.shape[0]
-        val_size = int(T * val_ratio)
-        train_end = int(T * train_ratio - max(0, sw + 1 - val_size))
-        val_end = int(train_end + max(sw + 1, val_size))
         has_val = val_ratio > 0.0
         has_test = (train_ratio + val_ratio) < 1.0
-
+        val_size = int(T * val_ratio)
+        
+        train_end = int(T * train_ratio - max(0, sw + 1 - val_size) * int(has_val))
+        val_end = int(train_end + max(sw + 1, val_size) * int(has_val))
+      
         match type:
             case "forecast":
                 # when forecasting, the first sw points will not be used
