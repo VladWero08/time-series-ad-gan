@@ -254,6 +254,7 @@ def run_pipeline(
     ss: int = 1,
     latent_size: int = 20,
     epochs: int = 2000,
+    rec_error_funcs: t.List[t.Tuple[str, t.Callable]] = [("point", point_wise_error)],
     batch_size: int = 64,
     n_critics: int = 1,
     lr_g: float = 1e-6,
@@ -298,8 +299,7 @@ def run_pipeline(
     model.d.eval()
 
     # for mad-gan, the errors for all aggregation functions will be computed
-    metrics = {"point": [], "area": [], "dtw": []}
-    rec_error_funcs = [("point", point_wise_error), ("area", area_wise_error), ("dtw", dtw_error)]
+    metrics = {name: [] for name, _ in rec_error_funcs}
 
     # infer the model for test data
     X_test_preds, y_test_anomaly_scores = test(model, test_dl, sw=sw, ss=ss, rec_error_funcs=rec_error_funcs, device=device)
