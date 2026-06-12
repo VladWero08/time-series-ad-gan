@@ -155,8 +155,8 @@ def train(
 
         loss_d_epoch /= (len(train_dl) * n_critics)
         loss_g_epoch /= len(train_dl)
-        
-        if verbose and (epoch + 1) % 10 == 0:
+
+        if verbose and (epoch + 1) % 25 == 0:
             print(f"Epoch {epoch+1:3d} | D Loss: {loss_d_epoch:.6f} | G Loss: {loss_g_epoch:.6f}")
 
 

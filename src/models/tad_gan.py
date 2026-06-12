@@ -279,7 +279,7 @@ def train(
         loss_dx_epoch /= (len(train_dl) * n_critics) 
         loss_dz_epoch /= (len(train_dl) * n_critics) 
 
-        if verbose and (epoch + 1) % 10 == 0:
+        if verbose and (epoch + 1) % 25 == 0:
             print(f"Epoch {epoch+1:3d} | GG Loss: {loss_gg_epoch:.6f} | GF Loss: {loss_gf_epoch:.6f} | FC Loss: {loss_fc_epoch:.6f} | DX Loss: {loss_dx_epoch:.6f} | DZ Loss: {loss_dz_epoch:.6f}")
 
 
