@@ -135,7 +135,7 @@ def test(
             batch_preds = model(xb).cpu()
             preds_list.append(batch_preds)
             
-    # Concatenate along the batch dimension to maintain chronological sequence
+    # concatenate along the batch dimension to maintain chronological sequence
     ds_preds = torch.cat(preds_list, dim=0)
     ds_errors = point_wise_error(ds_y, ds_preds)
 

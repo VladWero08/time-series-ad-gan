@@ -165,7 +165,7 @@ def run_pipeline(
     verbose: bool = True,
 ):
     if X_test is None or y_test is None:
-        X_train, y_train, X_val, y_val, X_test, y_test = split_df(X, y, sw, train_ratio, val_ratio, type="forecast")
+        X_train, y_train, X_val, y_val, X_test, y_test = split(X, y, sw, train_ratio, val_ratio, type="forecast")
     else:
         train_ratio = 1 - val_ratio
         X_train, y_train, X_val, y_val = split(X, y, sw, train_ratio, val_ratio, type="forecast")

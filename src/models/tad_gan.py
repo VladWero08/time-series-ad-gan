@@ -279,33 +279,54 @@ def train(
         loss_dx_epoch /= (len(train_dl) * n_critics) 
         loss_dz_epoch /= (len(train_dl) * n_critics) 
 
-        if verbose and (epoch + 1) % 5 == 0:
+        if verbose and (epoch + 1) % 10 == 0:
             print(f"Epoch {epoch+1:3d} | GG Loss: {loss_gg_epoch:.6f} | GF Loss: {loss_gf_epoch:.6f} | FC Loss: {loss_fc_epoch:.6f} | DX Loss: {loss_dx_epoch:.6f} | DZ Loss: {loss_dz_epoch:.6f}")
 
 
 def test(
     model: TadGAN,
-    ds: SignalsReconstructDataset,
+    dl: DataLoader,
     sw: int = 100,
     ss: int = 1,
-    rec_error_func: t.Callable = point_wise_error,
+    rec_error_funcs: t.List[t.Tuple[str, t.Callable]] = [("point", point_wise_error)],
     alpha: float = 0.5,
     device: str = "cpu",
-) -> t.Tuple[torch.Tensor]:
-    
+) -> t.Tuple[torch.Tensor, t.Dict[str, torch.Tensor]]:
+    # dictionary with all the reconstruction error functions used
+    X_rec = []
+    disc_scores = []
+    rec_errors = {name: [] for name, _ in rec_error_funcs}
+
+    model.eval()
     with torch.no_grad():
-        # X -> G(X) -> F(G(X))
-        ds_X_rec = model.gf(model.gg(ds.X.to(device))).detach()
-        ds_X_rec_agg = agg_reconstructions(ds_X_rec, sw=sw, ss=ss)
+        for xb in dl:
+            xb = xb.to(device)
+            # X -> G(X) -> F(G(X))
+            xb_rec = model.gf(model.gg(xb))
+            xb_disc_scores = model.dx(xb_rec)
 
-        # compute the reconstruction error (T, sw, n_features)
-        rec_errors = rec_error_func(ds.X, ds_X_rec)
-        # compute the discriminator score (T, 1)
-        disc_scores = model.dx(ds_X_rec).detach()
-        # compute the final anomaly score
-        anomaly_scores = agg_gan_errors(rec_errors, disc_scores, sw=sw, ss=ss, alpha=alpha)
+            for name, error_func in rec_error_funcs:
+                xb_rec_errors = error_func(xb, xb_rec)
+                rec_errors[name].append(xb_rec_errors.detach())
 
-    return ds_X_rec_agg, anomaly_scores
+            X_rec.append(xb_rec.detach())
+            disc_scores.append(xb_disc_scores.detach())
+
+    # concatenate along the batch dimension to maintain chronological sequence
+    X_rec = torch.cat(X_rec, dim=0)
+    X_rec = agg_reconstructions(X_rec, sw, ss)
+
+    disc_scores = torch.cat(disc_scores, dim=0)
+    rec_errors = {
+        name: torch.cat(rec_error, dim=0) 
+        for name, rec_error in rec_errors.items()
+    }
+    anomaly_scores = {
+        name: agg_gan_errors(rec_error, disc_scores, sw=sw, ss=ss, alpha=alpha) 
+        for name, rec_error in rec_errors.items()
+    }
+
+    return X_rec, anomaly_scores
 
 
 def run_pipeline(
@@ -320,10 +341,10 @@ def run_pipeline(
     epochs: int = 2000,
     batch_size: int = 64,
     n_critics: int = 5,
-    lr_gg: float = 1e-5,
-    lr_gf: float = 1e-5,
-    lr_dx: float = 1e-5,
-    lr_dz: float = 1e-5,
+    lr_gg: float = 1e-6,
+    lr_gf: float = 1e-6,
+    lr_dx: float = 1e-6,
+    lr_dz: float = 1e-6,
     device: str = "cpu",
     anomaly_type: str = "point",
     verbose: bool = True,
@@ -343,8 +364,9 @@ def run_pipeline(
 
     # build sliding windows for train, val, test
     train_ds = SignalsReconstructDataset(X_train, sw=sw, ss=ss)
-    train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+    train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=False)
     test_ds  = SignalsReconstructDataset(X_test, sw=sw, ss=ss)
+    test_dl  = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
 
     _, n_features = X.shape
     model = TadGAN(signal_size=sw, latent_size=latent_size, n_features=n_features, device=device)
@@ -362,30 +384,28 @@ def run_pipeline(
     model.gg.eval(); model.gf.eval(); model.dx.eval(); model.dz.eval()
 
     # for tad-gan, the errors for all aggregation functions will be computed
-    metrics = {"point": [], "area": [], "dtw": []}
-    rec_error_funcs = [
-        (point_wise_error, "point"), 
-        (area_wise_error, "area"), 
-        (dtw_error, "dtw")
-    ]
+    metrics = {"point": [], "area": []}
+    rec_error_funcs = [("point", point_wise_error), ("area", area_wise_error)]
 
-    for rec_error_func, rec_error_func_name in rec_error_funcs:
-        X_test_preds, y_test_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
-        y_test_anomaly_scores = y_test_anomaly_scores[cutoff:-cutoff]
+    # infer the model for test data
+    X_test_preds, y_test_anomaly_scores = test(model, test_dl, sw=sw, ss=ss, rec_error_funcs=rec_error_funcs, device=device)
+    y_test_anomaly_scores = {name: rec_error[cutoff:-cutoff] for name, rec_error in y_test_anomaly_scores.items()}
+    # infer the model for train data
+    _, y_train_anomaly_scores = test(model, train_dl, sw=sw, ss=ss, rec_error_funcs=rec_error_funcs, device=device)
+    y_train_anomaly_scores = {name: rec_error[cutoff:-cutoff] for name, rec_error in y_train_anomaly_scores.items()}
 
+    for rec_error_func_name in metrics:
         match anomaly_type:
             case "point":
-                # compute the forecasting errors for the train set
-                _, y_train_anomaly_scores = test(model, test_ds, sw=sw, ss=ss, rec_error_func=rec_error_func, device=device)
                 # compute the test labels based on the forecasting errors obtained in training
-                y_test_hat = detect_point_anomalies(y_train_anomaly_scores, y_test_anomaly_scores)
+                y_test_hat = detect_point_anomalies(y_train_anomaly_scores[rec_error_func_name], y_test_anomaly_scores[rec_error_func_name])
 
                 precision, recall, f1 = evaluate_point_anomalies(y_test, y_test_hat)
             case "contextual":
                 # compute the test anomaly sequences from test labels 
                 y_test_intervals = get_anomaly_intervals(y_test)
                 # compute the test anomaly sequences from test forecast errors
-                y_test_hat_intervals = detect_contextual_anomalies(y_test_anomaly_scores)
+                y_test_hat_intervals = detect_contextual_anomalies(y_test_anomaly_scores[rec_error_func_name])
                 y_test_hat = intervals_to_points(y_test_hat_intervals, y_test.shape[0])
 
                 precision, recall, f1 = evaluate_collective_anomalies(y_test_intervals, y_test_hat_intervals)
@@ -415,7 +435,7 @@ if __name__ == "__main__":
     y = np.zeros(T)
 
     # inject spike anomalies
-    anomaly_idx = [790, 800, 930]
+    anomaly_idx = [800, 801, 802, 929, 930, 931]
     ts[anomaly_idx] += 15.0
     y[anomaly_idx] = 1
 
@@ -424,13 +444,14 @@ if __name__ == "__main__":
         y,
         sw=100,
         ss=1,
-        epochs=10,
+        epochs=200,
         batch_size=64,
-        n_critics=5,
+        n_critics=2,
         lr_gg=1e-4,
         lr_gf=1e-4,
         lr_dx=1e-4,
         lr_dz=1e-4,
         device="cuda" if torch.cuda.is_available() else "cpu",
-        plot=True,
+        anomaly_type="contextual",
+        verbose=True,
     )
