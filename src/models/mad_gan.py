@@ -97,8 +97,8 @@ def train(
     epochs: int = 2000,
     n_critics: int = 5,
     lambda_gp: float = 10.0,
-    lr_g: float = 1e-5,
-    lr_d: float = 1e-5,
+    lr_g: float = 1e-6,
+    lr_d: float = 1e-6,
     beta1: float = 0.5,
     device: str = "cpu",
     verbose: bool = True,
@@ -206,16 +206,15 @@ def test(
     X_rec = []
     disc_scores = []
     rec_errors = {name: [] for name, _ in rec_error_funcs}
-
-    model.eval()
-    with torch.no_grad():
-        for xb in dl:
-            xb = xb.to(device)
-            # Z* -> G(Z*) -> D(G(Z*))
-            xb_best_z = find_best_latent(xb, model.g, model.signal_size, model.latent_size, device=device)
+    
+    for xb in dl:
+        xb = xb.to(device)        
+        xb_best_z = find_best_latent(xb, model.g, model.signal_size, model.latent_size, device=device)
+        
+        with torch.no_grad():
             xb_rec = model.g(xb_best_z).detach()
 
-            # compute batch reconstruction error  for each reconstruction function             
+            # compute batch reconstruction error for each reconstruction function            
             for name, error_func in rec_error_funcs:
                 xb_rec_errors = error_func(xb, xb_rec)
                 rec_errors[name].append(xb_rec_errors.detach())
@@ -226,19 +225,19 @@ def test(
             disc_scores.append(xb_disc_scores.detach())
             X_rec.append(xb_rec.detach())
             
-    # concatenate along the batch dimension to maintain chronological sequence
-    X_rec = torch.cat(X_rec, dim=0)
-    X_rec = agg_reconstructions(X_rec, sw, ss)
+    with torch.no_grad():
+        X_rec = torch.cat(X_rec, dim=0)
+        X_rec = agg_reconstructions(X_rec, sw, ss)
 
-    disc_scores = torch.cat(disc_scores, dim=0)
-    rec_errors = {
-        name: torch.cat(rec_error, dim=0) 
-        for name, rec_error in rec_errors.items()
-    }
-    anomaly_scores = {
-        name: agg_gan_errors(rec_error, disc_scores, sw=sw, ss=ss, alpha=alpha) 
-        for name, rec_error in rec_errors.items()
-    }    
+        disc_scores = torch.cat(disc_scores, dim=0)
+        rec_errors = {
+            name: torch.cat(rec_error, dim=0) 
+            for name, rec_error in rec_errors.items()
+        }
+        anomaly_scores = {
+            name: agg_gan_errors(rec_error, disc_scores, sw=sw, ss=ss, alpha=alpha) 
+            for name, rec_error in rec_errors.items()
+        }    
 
     return X_rec, anomaly_scores
 
@@ -357,10 +356,10 @@ if __name__ == "__main__":
         y,
         sw=100,
         ss=1,
-        epochs=10,
+        epochs=1,
         batch_size=64,
         lr_g=1e-4,
         lr_d=1e-4,
         device="cuda" if torch.cuda.is_available() else "cpu",
-        plot=True,
+        verbose=True,
     )
