@@ -36,6 +36,9 @@ def dtw_error(X_true: torch.Tensor, X_pred: torch.Tensor, window: int = 10) -> t
     -------
     st: torch.Tensor of shape (N, sw, features)
     """
+    X_true = X_true.cpu()
+    X_pred = X_pred.cpu()
+
     def dtw_distance(ts1: torch.Tensor, ts2: torch.Tensor) -> torch.Tensor:
         """
         Parameters
@@ -48,7 +51,7 @@ def dtw_error(X_true: torch.Tensor, X_pred: torch.Tensor, window: int = 10) -> t
         """
         n, m, features = ts1.shape[0], ts2.shape[0], ts1.shape[1]
         
-        dtw_matrix = torch.full((n + 1, m + 1, features), float("inf"))
+        dtw_matrix = torch.full((n + 1, m + 1, features), float("inf"), device=ts1.device)
         dtw_matrix[0, 0] = 0
 
         for i in range(1, n + 1):
