@@ -178,7 +178,7 @@ def find_best_latent(
     # initialize z as a learnable parameter
     z = torch.randn(batch_size, signal_size, latent_size, device=device, requires_grad=True)
     data = data.to(device)
-    g = g.to(device).eval()
+    g = g.to(device).train()
     
     optimizer = torch.optim.Adam([z], lr=lr)
     mse = nn.MSELoss(reduction='none')
@@ -190,6 +190,8 @@ def find_best_latent(
         loss = mse(generated, data).mean()
         loss.backward()
         optimizer.step()
+
+    g = g.eval()
 
     return z.detach()
 
