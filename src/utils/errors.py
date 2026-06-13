@@ -30,11 +30,11 @@ def dtw_error(X_true: torch.Tensor, X_pred: torch.Tensor, window: int = 10) -> t
 
     Parameters
     ----------
-    X_true, X_pred: torch.Tensor of shape (N, sw, features)
+    X_true, X_pred : torch.Tensor of shape (N, sw, features)
 
     Returns
     -------
-    st: torch.Tensor of shape (N, sw, features)
+    st : torch.Tensor of shape (N, sw, features)
     """
     X_true = X_true.cpu()
     X_pred = X_pred.cpu()
@@ -209,18 +209,18 @@ def gradient_penalty(d, real: torch.Tensor, fake: torch.Tensor, device: str) -> 
     
     Paramters
     ---------
-    d: Discriminator | DiscriminatorG | DiscriminatorF
+    d : Discriminator | DiscriminatorG | DiscriminatorF
         The discriminator for which the gradient penalty is computed.
-    real: torch.Tensor
+    real : torch.Tensor
         Batch of real time-series data.
-    fake: torch.Tensor
+    fake : torch.Tensor
         Batch of fake time-series data.
-    device: str
+    device : str
         Device where to move the tensors. ("cpu" or "cuda")
 
     Returns
     -------
-    gp: torch.Tensor
+    gp : torch.Tensor
         Gradient penalty computed for the interpolated samples.
     """
     batch_size = real.size(0)
@@ -250,9 +250,3 @@ def gradient_penalty(d, real: torch.Tensor, fake: torch.Tensor, device: str) -> 
 
     return gp
 
-
-if __name__ == "__main__":
-    x = torch.Tensor(np.random.random((10, 20, 3)))
-    y = torch.Tensor(np.random.random((10, 20, 3)))
-
-    print(dtw_error(x, y).shape)

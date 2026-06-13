@@ -149,4 +149,3 @@ def agg_reconstructions(X_rec: torch.Tensor, sw: int, ss: int) -> torch.Tensor:
         agg_errors.append(median_error)
 
     return torch.stack(agg_errors)
-

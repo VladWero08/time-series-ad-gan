@@ -15,11 +15,11 @@ def detect_point_anomalies(
 
     Parameters
     ----------
-    train_errors: torch.Tensor
+    train_errors : torch.Tensor
         Forecasting errors for training data.
-    test_errors: torch.Tensor
+    test_errors : torch.Tensor
         Forecasting errors for testing data.
-    max_std: int 
+    max_std : int 
         The 'normal' distance accepted from the mean of training errors, measured in standard deviations 
         of forecasting training errors.
 
@@ -111,10 +111,7 @@ def merge_anomaly_intervals(intervals: t.List[t.Tuple[int, int]]) -> t.List[t.Tu
     return merged
 
 
-def detect_contextual_anomalies(
-        anomaly_scores: torch.Tensor,
-        max_std: int = 4,
-    ) -> torch.Tensor:
+def detect_contextual_anomalies(anomaly_scores: torch.Tensor, q: float = 0.995) -> torch.Tensor:
     """
     Identifies contextual anomalies in time-series data using a dynamic, sliding-window thresholding technique.
     
@@ -133,7 +130,7 @@ def detect_contextual_anomalies(
 
     for i in range(0, T - threshold_sw + 1, threshold_ss):
         window = anomaly_scores[i:i+threshold_sw]
-        threshold = torch.quantile(window, 0.995)
+        threshold = torch.quantile(window, q)
         # use time-series size as labels size for easier index manipulation
         window_anomaly_labels = torch.zeros((T,))
 

@@ -88,10 +88,7 @@ def evaluate_collective_anomalies(y_intervals: torch.Tensor, y_hat_intervals: to
     return precision, recall, f1
 
 
-def plot_performance(
-    X: torch.Tensor,
-    X_preds: torch.Tensor,
-) -> None:
+def plot_performance(X: torch.Tensor, X_preds: torch.Tensor) -> None:
     """
     Plots both the original `X` and predicted `X_preds` time-series. 
 

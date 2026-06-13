@@ -23,15 +23,15 @@ class SignalsForecastDataset(Dataset):
         """
         Parameters
         ----------
-        X: np.ndarray
+        X : np.ndarray
             Time-series data of shape (T, n_attributes).
-        sw: int
+        sw : int
             Sliding window size.
-        ss: int
+        ss : int
             Sliding window step size.
-        in_features: list
+        in_features : list
             List with the indexes of the features that will be given as input to the learning model.
-        out_features: list
+        out_features : list
             List with the indexes of the features that will be given as output of the learning model.
         """
         self.sw = sw
@@ -48,12 +48,12 @@ class SignalsForecastDataset(Dataset):
 
         Parameters
         ----------
-        X: np.ndarray
+        X : np.ndarray
             Time-series data of shape (T, n_attributes).
 
         Returns
         -------
-        X_windowed, y_windowed: t.Tuple[torch.Tensor]
+        X_windowed, y_windowed : t.Tuple[torch.Tensor]
             The dataset reconstructed using sliding windows.
         """
         X_windowed, y_windowed = [], []
@@ -88,11 +88,11 @@ class SignalsReconstructDataset(Dataset):
         """
         Parameters
         ----------
-        X: np.ndarray
+        X : np.ndarray
             Time-series data of shape (T, n_attributes).
-        sw: int
+        sw : int
             Sliding window size.
-        ss: int
+        ss : int
             Sliding window step size.
         """
         self.sw = sw
@@ -105,12 +105,12 @@ class SignalsReconstructDataset(Dataset):
 
         Parameters
         ----------
-        X: np.ndarray
+        X : np.ndarray
             Time-series data of shape (T, n_attributes).
 
         Returns
         -------
-        X_windowed: torch.Tensor
+        X_windowed : torch.Tensor
             The new dataset built using sliding windows.
         """
         X_windowed = [X[t:t+self.sw, :] for t in range(0, len(X) - self.sw + 1, self.ss)]
