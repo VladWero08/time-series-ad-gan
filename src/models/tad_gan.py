@@ -362,9 +362,9 @@ def run_pipeline(
 
     # build sliding windows for train, val, test
     train_ds = SignalsReconstructDataset(X_train, sw=sw, ss=ss)
-    train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=False, num_workers=8 , pin_memory=True, persistent_workers=True)
+    train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=False)
     test_ds  = SignalsReconstructDataset(X_test, sw=sw, ss=ss)
-    test_dl  = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=8 , pin_memory=True, persistent_workers=True)
+    test_dl  = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
 
     _, n_features = X.shape
     model = TadGAN(signal_size=sw, latent_size=latent_size, n_features=n_features, device=device)
