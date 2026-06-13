@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import typing as t
 import numpy as np
+
 from torch.utils.data import DataLoader
 
 from src.utils.data import normalization, intervals_to_points, split, agg_reconstructions
@@ -132,26 +133,26 @@ class DiscriminatorZ(nn.Module):
 
 class TadGAN(nn.Module):
     def __init__(
-            self, 
-            signal_size: int = 100,
-            latent_size: int = 20,
-            n_features: int = 1,
-            g_hidden_size: int = 20,
-            f_hidden_size: int = 64,
-            device: str = "cpu",
-        ) -> None:
-            super().__init__()
+        self, 
+        signal_size: int = 100,
+        latent_size: int = 20,
+        n_features: int = 1,
+        g_hidden_size: int = 20,
+        f_hidden_size: int = 64,
+        device: str = "cpu",
+    ) -> None:
+        super().__init__()
 
-            self.signal_size = signal_size
-            self.latent_size = latent_size
-            self.n_features = n_features
-            self.g_hidden_size = g_hidden_size
-            self.f_hidden_size = f_hidden_size
+        self.signal_size = signal_size
+        self.latent_size = latent_size
+        self.n_features = n_features
+        self.g_hidden_size = g_hidden_size
+        self.f_hidden_size = f_hidden_size
 
-            self.gg = GeneratorG(self.latent_size, self.n_features, self.g_hidden_size).to(device)
-            self.gf = GeneratorF(self.latent_size, self.n_features, self.f_hidden_size).to(device)
-            self.dx = DiscriminatorX(self.signal_size, self.n_features).to(device)
-            self.dz = DiscriminatorZ(self.signal_size, self.latent_size).to(device)
+        self.gg = GeneratorG(self.latent_size, self.n_features, self.g_hidden_size).to(device)
+        self.gf = GeneratorF(self.latent_size, self.n_features, self.f_hidden_size).to(device)
+        self.dx = DiscriminatorX(self.signal_size, self.n_features).to(device)
+        self.dz = DiscriminatorZ(self.signal_size, self.latent_size).to(device)
             
 
 def train(
@@ -259,10 +260,6 @@ def train(
             # compute GAN loss for generator F
             loss_gf_gan = -tadgan.dx(fake_x_data).mean()
             loss_gf_gan.backward()
-
-            # compute the total loss for the generators
-            # loss_generators = loss_gg_gan + loss_gf_gan + lambda_fc * loss_forward_cycle
-            # loss_generators.backward()
 
             # backward pass for both optimizers
             optim_gg.step()

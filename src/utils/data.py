@@ -1,7 +1,6 @@
 import torch
 import numpy as np
 import typing as t
-import math
 
 
 def normalization(X: np.ndarray, X_train_min: np.ndarray, X_train_max: np.ndarray) -> np.ndarray:

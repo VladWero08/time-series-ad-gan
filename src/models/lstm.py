@@ -5,7 +5,6 @@ import typing as t
 
 from torch.utils.data import DataLoader
 
-
 from src.utils.data import normalization, intervals_to_points, split
 from src.utils.errors import point_wise_error
 from src.utils.evaluation import evaluate_point_anomalies, evaluate_collective_anomalies, plot_performance
@@ -60,7 +59,6 @@ def train(
     model: TSAD_LSTM,
     train_dl: SignalsForecastDataset,
     val_dl: DataLoader,
-    val_ds_y: torch.Tensor,
     optimizer,
     criterion,
     epochs: int = 35,
