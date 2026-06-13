@@ -380,7 +380,8 @@ def run_pipeline(
         lr_gf=lr_gf,
         lr_dx=lr_dx,
         lr_dz=lr_dz,   
-        device=device
+        device=device,
+        verbose=verbose
     )
     model.gg.eval(); model.gf.eval(); model.dx.eval(); model.dz.eval()
 
