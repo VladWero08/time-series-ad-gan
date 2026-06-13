@@ -51,8 +51,8 @@ class SignalsForecastDataset(Dataset):
         X: np.ndarray
             Time-series data of shape (T, n_attributes).
 
-        Returns:
-        --------
+        Returns
+        -------
         X_windowed, y_windowed: t.Tuple[torch.Tensor]
             The dataset reconstructed using sliding windows.
         """
@@ -108,8 +108,8 @@ class SignalsReconstructDataset(Dataset):
         X: np.ndarray
             Time-series data of shape (T, n_attributes).
 
-        Returns:
-        --------
+        Returns
+        -------
         X_windowed: torch.Tensor
             The new dataset built using sliding windows.
         """

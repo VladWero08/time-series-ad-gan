@@ -3,7 +3,7 @@ import typing as t
 import numpy as np
 import matplotlib.pyplot as plt
 
-from src.utils.preprocess import overlaps
+from src.utils.data import overlaps
 
 
 def evaluate_point_anomalies(y: torch.Tensor, y_hat: torch.Tensor) -> t.Tuple[float]:

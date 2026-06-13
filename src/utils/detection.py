@@ -13,8 +13,8 @@ def detect_point_anomalies(
     - all points that are no further than `max_std` standard deviations away from the mean are normal
     - all other points are considered outliers.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     train_errors: torch.Tensor
         Forecasting errors for training data.
     test_errors: torch.Tensor
@@ -23,8 +23,8 @@ def detect_point_anomalies(
         The 'normal' distance accepted from the mean of training errors, measured in standard deviations 
         of forecasting training errors.
 
-    Returns:
-    --------
+    Returns
+    -------
     labels: torch.Tensor
         A tensor with the labels for the testing errors given as parameters.
     """
@@ -121,8 +121,8 @@ def detect_contextual_anomalies(
     Computes a local threshold for overlapping windows of size `T / 3` moving at steps of `T / 30`, where `T` is the size of the anomaly scores tensor. 
     A data point is flagged as an anomaly (1) if its score deviates from the local window mean by more than `max_std` standard deviations.
     
-    Returns:
-    --------
+    Returns
+    -------
     anomaly_intervals: torch.Tensor
         A tensor with the anomaly intervals after detection and pruning.
     """

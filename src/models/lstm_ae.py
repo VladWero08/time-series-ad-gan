@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import typing as t
 from torch.utils.data import DataLoader
-from src.utils.preprocess import normalization, intervals_to_points, split, agg_reconstructions
+from src.utils.data import normalization, intervals_to_points, split, agg_reconstructions
 from src.utils.errors import point_wise_error, agg_reconstruction_errors
 from src.utils.evaluation import evaluate_point_anomalies, evaluate_collective_anomalies, plot_performance
 from src.utils.detection import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies

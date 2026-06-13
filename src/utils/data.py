@@ -4,9 +4,9 @@ import typing as t
 import math
 
 
-def normalization(X: np.ndarray, X_min: np.ndarray, X_max: np.ndarray) -> np.ndarray:
-    """Min-max normalization to [-1, 1]."""
-    X_normalized = 2 * (X - X_min) / (X_max - X_min + 1e-8) - 1
+def normalization(X: np.ndarray, X_train_min: np.ndarray, X_train_max: np.ndarray) -> np.ndarray:
+    """Normalizes the values of the given array `X` to [-1, 1] using `X_min` and `X_max`."""
+    X_normalized = 2 * (X - X_train_min) / (X_train_max - X_train_min + 1e-8) - 1
     return X_normalized
 
 
@@ -15,16 +15,27 @@ def overlaps(a: t.Tuple[int, int], b: t.Tuple[int, int]) -> bool:
     return a[0] <= b[1] and b[0] <= a[1]
 
 
-def intervals_to_points(y_intervals: t.List[t.List], n_labels: int) -> torch.Tensor:
+def intervals_to_points(y_intervals: t.List[t.List[int]], n_labels: int) -> torch.Tensor:
+    """
+    Transforms the anomaly intervals into a tensor with labels:
+    - `0`: points outside intervals
+    - `1`: points insinde the interval
+
+    Parameters
+    ----------
+    y_intervals : t.List[t.List[int]]
+        List of intervals with inclusive ends. (e.g. [[100, 105], [200, 300]])
+
+    Return
+    ------
+    point_labels : torch.Tensor
+        Tensor with labels 0 and 1 obtained from the given intervals.
+    """
     point_labels = torch.zeros(n_labels)
     for y_interval in y_intervals:
         start, end = y_interval[0], y_interval[1]
         point_labels[start:end+1] = 1
     return point_labels
-
-
-def slice_len(s: slice):
-    return max(0, math.ceil((s.stop - s.start) / s.step))
 
 
 def split(
@@ -43,15 +54,15 @@ def split(
 
         Parameters
         ----------
-        X: np.ndarray of shape (T, n_features)
+        X : np.ndarray of shape (T, n_features)
             The full time-series feature matrix.
-        y: np.ndarray of shape (T,)
+        y : np.ndarray of shape (T,)
             The corresponding ground-truth anomaly labels.
-        sw: int
+        sw : int
             Sliding window size used by the sequence generator model.
-        train_ratio: float, default=0.5
+        train_ratio : float, default=0.5
             The fraction of total data allocated for the training.
-        val_ratio: float, default=0.1
+        val_ratio : float, default=0.1
             The fraction of total data allocated for the validation. 
             If set to 0.0, the validation split is skipped entirely.
         type: {"forecast", "reconstruct"}, default="forecast"
@@ -102,12 +113,12 @@ def split(
 
 def agg_reconstructions(X_rec: torch.Tensor, sw: int, ss: int) -> torch.Tensor:
     """
-    Aggregates sliding window reconstruction to a per-timestep error by computing the median over all windows that contain each timestep.
+    Aggregates sliding window reconstruction to a per-timestep error by computing the mean over all windows that contain each timestep.
 
     Parameters
     ----------
-    reconstruction_errors : torch.Tensor
-        Reconstruction error per window and per position within that window.
+    X_rec : torch.Tensor
+        Reconstruction values per window and per position within that window.
     sw : int
         Sliding window size.
     ss : int
@@ -116,7 +127,7 @@ def agg_reconstructions(X_rec: torch.Tensor, sw: int, ss: int) -> torch.Tensor:
     Returns
     -------
     agg_errors : torch.Tensor of shape (T, features)
-        Median aggregated error value for each original timestep.
+        Mean aggregated values for each original timestep.
     """
     N = X_rec.shape[0]
     T = (N - 1) * ss + sw
@@ -139,18 +150,3 @@ def agg_reconstructions(X_rec: torch.Tensor, sw: int, ss: int) -> torch.Tensor:
 
     return torch.stack(agg_errors)
 
-
-
-if __name__ == "__main__":
-    x = np.zeros((900, 1))
-    y = np.zeros(900)
-
-    X_train, y_train, X_val, y_val, X_test, y_test = split(x, y, sw=100)
-
-    print(X_train.shape)
-    print(X_val.shape)
-    print(X_test.shape)
-
-    x_rec = torch.tensor(np.random.random((1000, 100, 5)))
-    x_pred = agg_reconstructions(x_rec, sw=100, ss=1)
-    print(x_pred.shape)
