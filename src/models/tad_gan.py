@@ -1,3 +1,10 @@
+"""
+TadGAN: Time Series Anomaly Detection Using Generative Adversarial Networks
+===========================================================================
+An independent implementation in PyTorch of a GAN-based reconstruction method for time-series anomaly detection, 
+    following Geiger et al., “TadGAN: Time series anomaly detection using generative adversarial networks.” 
+    In: 2020 ieee international conference on big data (big data). IEEE. 2020, pp. 33–43.
+"""
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -7,7 +14,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 
 from src.utils.data import normalization, intervals_to_points, split, agg_reconstructions
-from src.utils.errors import point_wise_error, area_wise_error, dtw_error, gradient_penalty, agg_gan_errors
+from src.utils.errors import point_wise_error, gradient_penalty, agg_gan_errors
 from src.utils.evaluation import evaluate_point_anomalies, evaluate_collective_anomalies, plot_performance
 from src.utils.detection import get_anomaly_intervals, detect_point_anomalies, detect_contextual_anomalies
 from src.utils.signals import SignalsReconstructDataset

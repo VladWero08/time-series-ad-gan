@@ -1,3 +1,10 @@
+"""
+Detecting Spacecraft Anomalies Using LSTMs and Nonparametric Dynamic Thresholding
+===========================================================================
+An independent implementation in PyTorch of a LSTM-based forecasting method for time-series anomaly detection,
+    following Hundman et al., “Detecting spacecraft anomalies using lstms and nonparametric dynamic thresholding.”
+    In: Proceedings of the 24th ACM SIGKDD international conference on knowledge discovery & data mining. 2018, pp. 387–395.
+"""
 import numpy as np
 import torch
 import torch.nn as nn
