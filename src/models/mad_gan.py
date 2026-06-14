@@ -264,6 +264,49 @@ def run_pipeline(
     anomaly_type: str = "point",
     verbose: bool = True,
 ) -> t.Dict[str, t.List]:
+    """
+    Runs the complete time-series anomaly detection process.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        The input data features for training or the entire dataset.
+    y : np.ndarray
+        The ground-truth anomaly labels for the input data.
+    X_test : np.ndarray, optional
+        A separate set of input features used only for testing.
+    y_test : np.ndarray, optional
+        The ground-truth anomaly labels for the test data.
+    train_ratio : float, default 0.60
+        The percentage of data to use for training the model.
+    sw : int, default 100
+        Sliding window size, how many past time steps the model looks at.
+    ss : int, default 1
+        Step size, how many steps the window moves forward each time).
+    latent_size : int, default 20
+        The size of the latent dimensional space in which the data will be encoded into, and decoded from.
+    epochs : int, default 2000
+        The maximum number of times the model loops through the entire training set.
+    rec_error_funcs : t.List[t.Tuple[str, t.Callable]], default [("point", point_wise_error)]
+        The list of tuple formed of reconstruction error name and function used to evaluate the model.
+    batch_size : int, default 64
+        The number of data samples processed together at one time.
+    lr_g : float, default 1e-6
+        The learning rate for the optimizer of the generator.
+    lr_d : float, default 1e-6
+        The learning rate for the optimizer of the discriminator
+    device : str, default "cpu"
+        The hardware to run the code on ("cpu" or "cuda").
+    anomaly_type : str, default "point"
+        The type of anomaly detection to use ("point" or "contextual").
+    verbose : bool, default True
+        If True, prints progress updates and final metrics.
+    
+    Returns
+    -------
+    t.Tuple[float, float, float]: [precision, recall, f1]
+    """
+
     cutoff = sw // 2
     if X_test is None or y_test is None:
         val_ratio = 0

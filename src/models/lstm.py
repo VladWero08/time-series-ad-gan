@@ -156,24 +156,58 @@ def run_pipeline(
     epochs: int = 35,
     batch_size: int = 64,
     lr: float = 1e-4,
-    patience: int = 10,
+    patience: int = 15,
     device: str = "cpu",
     anomaly_type: str = "point",
     verbose: bool = True,
 ) -> t.Tuple[float, float, float]:
     """
-    Full anomaly detection pipeline for a multivariate time series.
+    Runs the complete time-series anomaly detection process.
 
     Parameters
     ----------
-    X : np.ndarray of shape (T, n_attributes)
-        The full time series.
-    y: np.ndarray of shape (T, )
-        The anomaly labels of the time-series.
-    train_ratio : float
-        Fraction of data used for training (default 40% as in paper).
-    val_ratio : float
-        Fraction of data used for validation / early stopping (default 10%).
+    X : np.ndarray
+        The input data features for training or the entire dataset.
+    y : np.ndarray
+        The ground-truth anomaly labels for the input data.
+    X_test : np.ndarray, optional
+        A separate set of input features used only for testing.
+    y_test : np.ndarray, optional
+        The ground-truth anomaly labels for the test data.
+    in_features : list, optional
+        List of column indices from X to use as inputs for the model.
+    out_features : list, optional
+        List of column indices from X that the model should try to predict.
+    train_ratio : float, default 0.60
+        The percentage of data to use for training the model.
+    val_ratio : float, default 0.10
+        The percentage of data to use for validating the model during training.
+    sw : int, default 250
+        Sliding window size, how many past time steps the model looks at.
+    ss : int, default 1
+        Step size, how many steps the window moves forward each time).
+    hidden_size : int, default 80
+        The number of features inside the hidden layers of the LSTM.
+    num_layers : int, default 2
+        The number of LSTM layers stacked on top of each other.
+    epochs : int, default 35
+        The maximum number of times the model loops through the entire training set.
+    batch_size : int, default 64
+        The number of data samples processed together at one time.
+    lr : float, default 1e-4
+        The learning rate for the optimizer, controlling how fast the model learns.
+    patience : int, default 10
+        How many epochs to wait for the validation loss to improve before stopping early.
+    device : str, default "cpu"
+        The hardware to run the code on ("cpu" or "cuda").
+    anomaly_type : str, default "point"
+        The type of anomaly detection to use ("point" or "contextual").
+    verbose : bool, default True
+        If True, prints progress updates and final metrics.
+    
+    Returns
+    -------
+    t.Tuple[float, float, float]: [precision, recall, f1]
     """
     if X_test is None or y_test is None:
         X_train, y_train, X_val, y_val, X_test, y_test = split(X, y, sw, train_ratio, val_ratio, type="forecast")
