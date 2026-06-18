@@ -1,0 +1,78 @@
+\chapter{Related Work}
+\label{chap:03-related-work}
+
+This chapter reviews key GAN-based architectures for time-series anomaly detection, focusing on MAD-GAN and TadGAN, which represent two influential models leveraging adversarial learning for detecting outliers in multivariate time-series.
+
+% ----------------------------------------------
+\section{MAD-GAN}
+\label{sec:mad-gan}
+% ----------------------------------------------
+Following the successful use of GAN-based methods for anomaly detection in medical images \cite{schlegl2019f-anogan}, MAD-GAN was proposed to detect outliers in multivariate time-series. It benefits from combining the reconstruction error obtained from the generator with the discriminator score to compute anomaly scores.
+
+In this work, the authors addressed the need for using unsupervised learning methods for anomaly detection due to the lack of labeled data. Unsupervised learning methods were divided into four categories, from which the deep-learning-based methods included Autoencoders, LSTM Encoder-Decoder, and Deep Auto-Encoding Gaussian Mixture Model \cite{li2019madgan}. To build on these approaches, they introduced a novel strategy that combines the generator's reconstruction error with the discriminator's ability to differentiate between real and fake samples, thereby improving detection performance.
+
+Given the training dataset with multivariate time-series $X$, they used a window size $s_w = 100$ and a step size $s_s = 1$ to divide them into subsequences. Their approach models multivariate dependencies jointly rather than treating each feature independently. Using both the subsequences from $X$ and subsequences generated from the latent space $Z$, with $z_w = 15$, a discriminator $D$ and generator $G$ were trained in the standard manner of GAN, having their networks based on LSTM. To combine the outputs of both networks, a custom anomaly score, Discriminator-Reconstruction score, was defined as:
+$$
+DR = \lambda Res(X_{test}) + (1-\lambda) D(X_{test}),
+$$
+where $Res(X_{test})$ is the best reconstruction error that $G$ can obtain for the given test data $X_{test}$, and $D(X_{test})$ is the discriminator score to distinguish between real and fake data. The parameter $\lambda$ controls the individual contribution of each metric to the final score. Assuming that $G$ reflects the normal distribution of $X$, then we should be able to find $z^*$ such that $G(z^*)$ is the closest generated data to $X_{test}$. To find $z^*$, the similarity between $G(Z^*)$ and $X_{test}$ needs to be maximized. This was modeled as an optimization problem:
+$$
+z^* = \min_{z \in Z} 1 - Simi(X_{test}, G(z)),
+$$
+where $Simi$ represents the similarity function used, implemented as the MSE between the sequences. Note that the maximization problem was rewritten as a minimization problem due to the vanishing gradient problem that might occur in the early stages of training, when the similarity is closer to 0. This test-time procedure is computationally expensive and represents one of the main limitations of MAD-GAN.
+
+Because the data was split into subsequences, a single time point $x_t$ will appear in several windows. The final $DR$ score for $x_t$ is defined as the mean anomaly score obtained by the subsequences in which $x_t$ is included:
+$$
+DR_t = \frac{1}{|\mathcal{W}(t)|} \sum_{(j,s) \in \mathcal{W}(t)} L_{j,s},
+\qquad
+L_{t} = \lambda Res(x_{t}) + (1-\lambda) D(x_{t}),
+$$
+where $x_t \in X$ is the stream at time $t$, $j \in \{ 1, 2, ..., N\}$ a sub-windows index, $s \in \{ 1, 2, ..., s_w\}$ a window slide size and $\mathcal{W(t)}$ the set of subsequences containing the point $t$. If the $DR_t$ score exceeds a predefined $\tau$ threshold, then the $x_t$ data point is considered to be an anomaly.
+
+To evaluate this method, the authors used two benchmark datasets in industrial anomaly detection: \textbf{SWaT} (Secure Water Treatment) and \textbf{WADI} (Water Distribution). Both datasets were collected from real water-treatment and water-distribution testbeds, and each includes a normal operating period (SWaT for 11 days, WADI for 16 days), followed by a staged attack period (SWaT for 4 days, WADI for 2 days). The performance was compared to previous methods for multivariate time-series anomaly detection: Principal Component Analysis (PCA), K-Nearest Neighbor (KNN) \cite{angiulli2002knn-ad}, Feature-Bagging (FB) \cite{lazarevic2005fb-ad}, and Autoencoders (AE) \cite{an2015vae-ae-ad}. The experiments have shown that MAD-GAN outperformed these methods on both datasets \cite{li2019madgan}.
+
+Finally, they pointed out that dimensionality reduction could substantially improve computational efficiency, and that the limits on how much information can be reduced without harming detection performance should be analyzed. In addition, the instability of GAN-based methods represented an issue, as performance can have high variance across runs, motivating another research direction to improve GAN's training.
+% ----------------------------------------------
+
+
+% ----------------------------------------------
+\section{TadGAN}
+\label{sec:tad-gan}
+% ----------------------------------------------
+While reconstruction-based methods became popular for anomaly detection, they still suffered from overfitting by mapping outliers to the latent space alongside the normal points. To address this limitation, TadGAN \cite{geiger2020tadgan} adopts a cycle-consistent GAN architecture \cite{zhu2017cyclegan} that learns in an adversarial manner the mappings between the time-series domain $X$ and the latent space $Z$, together with the inverse mapping, similar to how an autoencoder works.
+
+Given the training dataset with time-series $X$, the same $s_w = 100$ and $s_s = 1$ as in MAD-GAN were used to create subsequences. The learning objective for this cycle GAN differs a bit from the one described in Section \ref{subsec:cycle-gan}, because Wasserstein loss \cite{arjovsky2017wasserstein} replaced the Binary Cross Entropy loss, and the backward cycle loss was dropped, as it did not provide any improvements to the training. In this setting, generator $G:X \to Z$ maps real data to the latent space, and $F: Z \to X$ is the inverse mapping of $G$, while discriminator $D_X$ distinguishes real time-series data from fake data generated by $F$, and $D_Z$ distinguishes latent-space samples from those produced by $G$. In this framework, $G$ acts as an encoder, while $F$ acts as a decoder, forming a cycle-consistent structure analogous to an autoencoder, but trained with adversarial objectives.
+
+As pointed out in Section \ref{subsec:standard-gan}, GANs suffer from the mode collapse problem, the problem in which the generator only learns a fraction of the data distribution and repeatedly generates the same output for multiple, different inputs. To mitigate this issue, the Wasserstein loss \cite{arjovsky2017wasserstein} was used to constrain the discriminators to be 1-Lipschitz continuous functions. This restriction reduces the possibility of getting saturated gradients and makes the discriminator converge to a linear function \cite{arjovsky2017wasserstein}. For the generator $F:Z \to X$ and discriminator $D_X$, the Wasserstein loss is defined as:
+$$
+\mathcal{L}_{WGAN} (F, D_X, Z, X) = \mathbb{E}_{x \sim p_x} [D_X(x)] - \mathbb{E}_{z \sim p_z} [D_X(F(z))]
+$$
+
+Another modification on top of the original implementation of cycle-consistent GAN \cite{zhu2017cyclegan} was to use the $L_2$ norm instead of $L_1$ to assign a higher penalty for deviating points, to separate anomalies more easily. Lastly, the complete training objective:
+$$
+\mathcal{L}_{TadGAN} = \mathcal{L}_{WGAN}(G, D_Z, X, Z) + \mathcal{L}_{WGAN}(F, D_X, Z, X) + \mathcal{L}_{cycle-L_2} (F, D_x)
+$$
+
+The anomaly score was computed very similarly to MAD-GAN \cite{li2019madgan}, as the reconstruction error was combined with the discriminator $D_X$'s score, both metrics being transformed to z-scores before making the aggregation. Two aggregation functions, sum and multiplication, were evaluated and defined as:
+$$
+a_{sum}(x) = \alpha Z_{Res}(x) + (1-\alpha) Z_{D_X}(x), \text{ with default }\alpha = 0.5
+$$
+$$
+a_{mul}(x) = \alpha Z_{Res}(x) \odot Z_{D_X}(x), \text{ with default } \alpha = 1
+$$
+where $Z_{Res}(x)$ and $Z_{D_X}(x)$ are the z-scores for the reconstruction error and discriminator score. Conversely, the aggregation of the collection of reconstructed values for a single point $x_i$ was done using the median instead of the mean. In addition to the point-wise reconstruction error, two new reconstruction errors were used: area difference, and dynamic time warping \cite{berndt1994dtw}. In Chapter \ref{chap:04-time-series-anomaly-detection-with-gans}, these reconstruction errors are analyzed in detail. 
+
+Moreover, since their primary objective was to identify contextual anomalies, locally adaptive thresholding was employed to determine anomaly thresholds. After obtaining anomaly scores for each point, the time-series was split into subsequences of window size $\frac{T}{3}$ and step size $\frac{T}{3 \times 10}$, and any point with an anomaly score that was four standard deviations away from the mean score of the subsequence was labeled as anomalous \cite{geiger2020tadgan}. An anomalous sequence was considered to be a set of continuous points labeled as anomalous. 
+
+The evaluation of this method was done on eleven different datasets:
+\begin{itemize}
+    \item \textbf{NASA}: MSL (Mars Science Laboratory) and MSL (Soil Moisture Active Passive): spacecraft telemetry data,
+    \item \textbf{Yahoo S5}: A1, real traffic from Yahoo services, A2, A3, A4, artificial data,
+    \item \textbf{NAB} (Numenta Anomaly Benchmark):  Artificial, Ad Exchange, AWS Cloudwatch, Traffic, and Tweets data,
+\end{itemize}
+using the common metrics of precision, recall, and F1 score. Due to the use of sliding windows for anomaly detection, a high false-positive rate occurred, which was addressed by applying pruning rules from \cite{hundman2018detecting}.
+
+The baselines used for comparison were divided into forecasting-based methods: Autoregressive Integrated Moving Average (ARIMA) \cite{pena2013arima-ad}, Hierarchical Temporal Memory (HTM) \cite{ahmad2017htm}, Long-Short Term Memory (LSTM) \cite{hundman2018detecting}, reconstruction-based: LSTM Autoencoder (LSTM-AE), MAD-GAN \cite{li2019madgan}, and two commercial tools: Microsoft Azure Anomaly Detector and Amazon DeepAR. 
+
+Compared to MAD-GAN, TadGAN eliminates the need for costly latent space optimization at inference time by directly learning an encoder-decoder mapping between the data space and the latent space. Additionally, the use of Wasserstein loss improves training stability, and the cycle-consistent structure enables more robust reconstruction. These design choices lead to improved performance in experimental evaluations, where TadGAN outperformed MAD-GAN for all datasets. On top of this, it outperformed all other methods by having the best averaged F1 among the datasets, suggesting that further research into GAN-based approaches for time-series anomaly detection may yield meaningful improvements and remains a promising direction for the field.
+% ----------------------------------------------

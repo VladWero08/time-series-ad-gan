@@ -1,0 +1,155 @@
+\chapter{Evaluation}
+\label{chap:05-evaluation}
+
+In many real-world applications, the anomalies are collective, consisting of subsequences of consecutive events, metrics, or operations that are abnormal for the system that generated them. Hence, our main focus was to evaluate the GAN-based method on datasets containing such collective anomalies and to compare it to baseline prediction-based detection methods.
+
+% ----------------------------------------------
+\section*{Datasets}
+\label{sec:05-datasets}
+% ----------------------------------------------
+To evaluate the GAN-based detection methods, we utilized a total of 11 datasets, which were provided by three different sources: NASA, Yahoo, and the Numenta Anomaly Benchmark (\textit{NAB}). Next, we give a short description of each dataset, grouped by source, and display Table \ref{tab:datasets-description} with general information about the datasets.
+
+\begin{table}[H]
+\centering
+\scriptsize
+\begin{tabular}{lccccccccccc}
+\toprule
+ & MSL & SMAP & A1 & A2 & A3 & A4 & Art & AdEx & AWS & Traffic & Twitter \\
+\midrule
+Signals        & 27      & 53         & 67      & 100      & 100     & 100       & 6        & 6       & 17      & 7       & 10 \\
+Features       & 55      & 25         & 1       & 1        & 1       & 1         & 1        & 1       & 1       & 1       & 1 \\
+Points   & 132,046 & 562,800    & 94,866  & 142,100  & 168,000 & 168,000   & 24,192   & 9,610   & 67,740  & 15,664  & 158,631 \\
+Anomalies & 7,666   & 54,696     & 1,669   & 466      & 943     & 837       & 2,418    & 960     & 6,312   & 1,560   & 15,651 \\
+Rate   & 5.88\%  & 9.72\%     & 1.76\%  & 0.33\%   & 0.56\%  & 0.50\%    & 10.00\%  & 9.99\%  & 9.32\%  & 9.96\%  & 9.87\% \\
+\bottomrule
+\end{tabular}
+\caption{General information about the datasets.}
+\label{tab:datasets-description}
+\end{table}
+
+\textbf{NASA} published two datasets with telemetry data: the Mars Science Laboratory (\textit{MSL}), collected by NASA’s Curiosity rover, and the Soil Moisture Active Passive (\textit{SMAP}), which consists of sensor readings gathered during a satellite mission dedicated to observing Earth’s soil moisture and surface conditions. In both datasets, the anomaly detection methods use the full multivariate time series as input and predict a single scalar value corresponding to the next value of the first feature, which is the telemetry signal being monitored. The remaining features are binary values encoding contextual information, such as commands and system states, that help explain and predict the target telemetry signal. For the LSTM forecasting method, which will be introduced in the next section, we used all features for training and predicted only the signal. For the reconstruction-based methods, we used only the signal to train them due to the destabilization caused by the high sparsity of the command features.
+
+\textbf{Yahoo S5} is a public benchmark from Yahoo Research, Webscope S5, created to evaluate time-series anomaly detectors on production-like metrics. It contains four different univariate time-series sub-datasets: \textit{A1}, which is a real dataset obtained from the production traffic of Yahoo servers, and \textit{A2}, \textit{A3}, and \textit{A4}, which are synthetic datasets. All four datasets contain both point and collective anomalies, but we will only use the collective anomalies. 
+
+\begin{figure}[H]
+  \centering
+  \includesvg[width=0.33\linewidth]{images/a1_plot_0}\hfill
+  \includesvg[width=0.33\linewidth]{images/a1_plot_1}\hfill
+  \includesvg[width=0.33\linewidth]{images/a1_plot_2}
+  \caption{\small A1 Time-Series Samples}
+\end{figure}
+
+\begin{figure}[H]
+    \includesvg[width=0.33\linewidth]{images/a2_plot_0}\hfill
+    \includesvg[width=0.33\linewidth]{images/a2_plot_1}\hfill
+    \includesvg[width=0.33\linewidth]{images/a2_plot_2}\hfill
+    \caption{\small A2 Time-Series Samples}
+\end{figure}
+
+\textbf{NAB} \cite{lavin2015nab-dataset} is an open-source benchmark for time-series anomaly detectors in streaming real-world environments. From the curated collection of labeled univariate time-series, we have used five of them: \textit{Artificial}, containing synthetic generated data, \textit{AdExchange}, with online advertisement click rates, \textit{AWS Cloudwatch}, server metrics from the Cloudwatch service provided by AWS, \textit{Traffic}, real data from the metro and urban area from Minnesota, respectively \textit{Tweets}, from social media posts of large publicly-traded companies on Twitter, currently X. All datasets contain only collective anomalies.
+
+\begin{figure}[H]
+  \centering
+  \includesvg[width=0.33\linewidth]{images/ad_ex_plot_1}\hfill
+  \includesvg[width=0.33\linewidth]{images/ad_ex_plot_1}\hfill
+  \includesvg[width=0.33\linewidth]{images/ad_ex_plot_2}\hfill
+  \caption{\small Ad Exchange Time-Series Samples}
+\end{figure}
+
+\begin{figure}[H]
+    \includesvg[width=0.33\linewidth]{images/traffic_plot_0}\hfill
+    \includesvg[width=0.33\linewidth]{images/traffic_plot_1}\hfill
+    \includesvg[width=0.33\linewidth]{images/traffic_plot_2}\hfill
+    \caption{\small Urban Traffic Time-Series Samples}
+\end{figure}
+
+For the data preparation step, we first normalized the values of each time-series in our datasets to the interval $[-1, 1]$. We then used a sliding window of $s_w=100$ and a step size of $s_s=1$ to partition the time-series into subsequences for forecasting methods, respectively, a different window size of $s_w=250$ and the same step size $s_s=1$ for reconstruction methods. For Yahoo S5 and NAB, each signal was split into 50\% train, 10\% validation, and 40\% testing, whereas for NASA, we directly used the train-test split provided by the authors.
+
+The performance of the methods was measured using the Precision, Recall, and F‑1 metrics. For point anomalies, this is straightforward: a predicted anomaly point is considered correct if it matches a true anomaly point. However, for collective anomalies, we must clearly define how to decide whether a predicted outlier subsequence corresponds to a true anomalous subsequence. To encourage a low false-positive rate, we follow the methodology in \cite{hundman2018detecting} that defined these rules:
+\begin{itemize}
+    \item \textbf{TP}: when an anomalous window overlaps any predicted window;
+    \item \textbf{FN}: when an anomalous window does not overlap any predicted window; 
+    \item \textbf{FP}: when a predicted window does not overlap any anomalous window.
+\end{itemize}
+
+% ----------------------------------------------
+\section*{Baselines}
+\label{sec:05-baselines}
+% ----------------------------------------------
+To evaluate the performance of the GAN-based methods, we compared them against several commonly used prediction-based approaches for time-series anomaly detection, as noted in the taxonomy from Subsection \ref{subsec:prediction-based-methods}. 
+
+As forecasting baselines, we used ARIMA and LSTM. Due to the window size of $s_w = 100$, predictions could not be generated for the first $s_w$ data points of a test time-series; thus, only the remaining points were evaluated. Anomaly scores were defined as the point-wise difference between the forecast and true values, with overlapping window scores aggregated using the median.  
+
+As a reconstruction baseline, an autoencoder was trained on subsequences of size $s_w = 250$. To account for sequence boundaries where fewer overlapping windows exist, the first and last $s_w / 2$ data points of a test time-series were excluded from evaluation, restricting the analysis to the middle segment. Once more, anomaly scores were defined as the point-wise difference between the reconstructed and true values, and the aggregation of overlapping window scores was done using the median.
+
+\textbf{ARIMA}. We adopted the ARIMA model, which provides a simple yet solid statistical baseline for forecasting-based methods. For multivariate time-series (SMAP and MSL), the ARIMA model was fitted for each feature independently, and the errors were concatenated together. An alternative would have been to use VARIMA, the vector version of ARIMA, but the large number of features for our datasets (55 for MSL and 25 for SMAP) would have made it very unstable. This model was used only for benchmarking rather than implementation; thus, the results for the ARIMA were sourced directly from Tad-GAN \cite{geiger2020tadgan}, and the setting for the implemented methods was carefully chosen to provide a fair comparison between them.
+
+\textbf{LSTM}. Following the architecture and optimization configurations defined in \cite{hundman2018detecting}, the LSTM baseline consists of two stacked LSTM layers, each containing 80 hidden units and a dropout rate of $0.3$, followed by a fully connected dense layer that predicts the next value. The model was trained for $200$ $epochs$, using a batch size of $64$, $MSE$ loss, and the $Adam$ optimizer with $lr = 1e-4$. For SMAP and MSL, the model was trained on all features, and predictions were made only for the first feature, which represents the actual signal in the telemetry data. This choice was due to LSTM's inability to predict high-dimensional outputs \cite{hundman2018detecting}. To prevent overfitting, early stopping was used with a minimum delta of $\delta = 3e-4$ and patience of $15$ on the validation set.
+
+\textbf{Autoencoder}. The autoencoder version used takes into account temporal information; both the encoder and decoder consist of an LSTM with two stacked layers, $80$ hidden units; they are followed by a fully connected dense layer that reconstructs the subsequence. The model was trained for $200$ $epochs$, using a batch size of $64$, $MSE$ loss, and the $Adam$ optimizer with $lr = 1e-4$, with early stopping with minimum delta $\delta = 3e-4$ and patience of $15$ on the validation set.
+% ----------------------------------------------
+
+
+% ----------------------------------------------
+\section*{Results}
+\label{sec:05-results}
+% ----------------------------------------------
+The evaluation results for collective anomaly detection across the three datasets, for the baselines and the GAN-based methods, are presented in Table \ref{tab:f1-scores-all-methods-collective}. Computation of the scores was done using the sliding window technique presented in Section \ref{sec:04-anomaly-scoring}. 
+
+When comparing the overall performance of all methods, the forecasting models outperform the reconstruction models. The LSTM used for forecasting achieved the highest overall mean F1-score of 0.641, while the statistical model ARIMA had the second-highest F1-score of 0.598. Both methods performed significantly better than the Autoencoder models.
+
+Among the reconstruction methods, TadGAN performed the best with an F1-score of 0.377, which was very close to the LSTM Autoencoder's F1-score of 0.372. The collapse of TadGAN on the real traffic dataset lowered the overall performance. An analysis of the causality of this issue might close the gap in performance between TadGAN and the forecasting methods.
+
+\begin{table}[H]
+\centering
+\scriptsize
+\begin{tabular}{lccccccccccc | c}
+\toprule
+Method & MSL & SMAP & A1 & A2 & A3 & A4 & Art & AdEx & AWS & Traffic & Twitter & Mean \\
+\midrule
+LSTM    & 0.330 & 0.417 & 0.462 & \textbf{1.000} & \textbf{0.980} & \textbf{1.000} & \textbf{0.594} & \textbf{0.833} & 0.667 & \textbf{0.571} & 0.207 & \textbf{0.641} \\
+ARIMA*   & \textbf{0.492} & \textbf{0.420} & \textbf{0.726} & 0.836 & 0.815 & 0.703 & 0.353 & 0.583 & 0.518 & 0.571 & \textbf{0.567} & 0.598 \\
+TadGAN  & 0.366 & 0.406 & 0.537 & 0.684 & 0.160 & 0.272 & 0.389 & 0.333 & \textbf{0.806} & 0.000 & 0.194 & 0.377 \\
+LSTM-AE & 0.346 & 0.220 & 0.657 & 0.514 & 0.370 & 0.200 & 0.344 & 0.500 & 0.373 & 0.381 & 0.190 & 0.372 \\
+MAD-GAN & 0.347 & 0.345 & 0.537 & 0.357 & 0.152 & 0.090 & 0.261 & 0.333 & 0.334 & 0.071 & 0.164 & 0.271 \\
+\bottomrule
+\end{tabular}
+\caption{\centering F1-Scores For Detecting Collective Anomalies}
+\label{tab:f1-scores-all-methods-collective}
+\end{table}
+
+Tables \ref{tab:f1-scores-mad-gan-variations} and Table \ref{tab:f1-scores-tad-gan-variations} provide deeper insights into how different anomaly scoring techniques work on the GAN methods. For both architectures, anomaly scores computed using the point error together with the discriminator score yielded better results. The difference between point and area errors was not significant for MAD-GAN, whereas for the TadGAN, there was a larger gap between the two error metrics. However, the evaluation showed the advantage of using cycle-GANs over standard GANs, as TadGAN outperformed MAD-GAN, having a higher mean score of 0.377 F-1 compared to MAD-GAN's 0.271 F1-score.
+
+Not only TadGAN, but also MAD-GAN performance collapsed when using the area difference error on the A3 and A4 datasets. This might be correlated with the fact that many anomalies from these datasets are spike point anomalies, which might be attenuated by computing the reconstruction error across neighbours that are normal points. On other datasets, area difference significantly improved MAD-GAN's performance; for the Artificial dataset, it jumped from an F1-score of 0.261 to 0.450; similarly, it improved the F1-score of TadGAN on the real traffic dataset from 0.000 to 0.314.
+
+\begin{table}[H]
+\centering
+\scriptsize
+\begin{tabular}{lccccccccccc | c}
+\toprule
+Method & MSL & SMAP & A1 & A2 & A3 & A4 & Art & AdEx & AWS & Traffic & Twitter & Mean \\
+\midrule
+Critic + Point   & 0.347 & 0.345 & 0.537 & 0.357 & 0.152 & 0.090 & 0.261 & 0.333 & 0.334 & 0.071 & 0.164 & \textbf{0.271}  \\
+Critic + Area    & 0.345 & 0.277 & 0.537 & 0.124 & 0.000 & 0.000 & 0.450 & 0.333 & 0.244 & 0.271 & 0.209 & 0.254 \\
+\bottomrule
+\end{tabular}
+\caption{\centering MAD-GAN F1-Scores For Different Anomaly Scoring Techniques \\ For Detecting Collective Anomalies}
+\label{tab:f1-scores-mad-gan-variations}
+\end{table}
+
+
+\begin{table}[H]
+\centering
+\scriptsize
+\begin{tabular}{lccccccccccc | c}
+\toprule
+Method & MSL & SMAP & A1 & A2 & A3 & A4 & Art & AdEx & AWS & Traffic & Twitter & Mean\\
+\midrule
+Critic + Point   & 0.366 & 0.406 & 0.537 & 0.684 & 0.160 & 0.272 & 0.389 & 0.333 & 0.806 & 0.000 & 0.194 & \textbf{0.377} \\
+Critic + Area    & 0.374 & 0.356 & 0.537 & 0.132 & 0.000 & 0.000 & 0.283 & 0.333 & 0.615 & 0.314 & 0.207 & 0.286 \\
+\bottomrule
+\end{tabular}
+\caption{\centering TadGAN F1-Scores For Different Anomaly Scoring Techniques \\ For Detecting Collective Anomalies}
+\label{tab:f1-scores-tad-gan-variations}
+\end{table}
+% ----------------------------------------------

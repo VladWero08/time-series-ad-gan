@@ -1,0 +1,27 @@
+\chapter{Conclusion}
+\label{chap:06-conclusion}
+
+This thesis explored different prediction-based anomaly detection for time-series data. By using multiple baselines to evaluate the GAN-based methods, we found that there is a difference in performance between the forecasting methods and the reconstruction methods. On average, LSTM and ARIMA outperformed the LSTM Autoencoder, as well as the MAD-GAN and TadGAN architectures. On the other hand, we were able to show that the cycle consistency loss, together with the capability to directly learn the reconstruction of a time-series without searching the latent space, helped the GAN architecture. TadGAN had a better average F1-score than MAD-GAN. In the following section, we will discuss the limitations and potential improvements for the two GAN methods. 
+
+% ----------------------------------------------
+\section*{Limitations}
+\label{sec:06-limitations}
+% ----------------------------------------------
+For the two GAN-based approaches, the main limitation was the training procedure. Due to limited computing power, we had to reduce the number of epochs and increase the learning rate. Because of this, both MAD-GAN and TadGAN networks were undertrained on part of the signals, and their reconstructions could not match the data's mean and variance shifts. To truly assess the capabilities of these models, they should be trained for longer, with a lower learning rate and a small batch size.
+
+Another drawback that appeared during the training of the Tad-GAN was the destabilization between the generator $G$ and discriminator $D_Z$. The discriminator $D_Z$ performance increased very fast compared to the generator $G$, which was not able to match the randomness of the latent space. This behavior is not unexpected; the univariate time-series space $X$ is much smaller than the latent space $Z$ with $z_w =20$, which could justify the struggle of the generator to find a mapping between the two spaces.
+
+Regarding the datasets, forecasting and reconstruction methods assume that the training data contains no anomalies to identify outliers by comparing the prediction with the true time-series value. For the NASA datasets, the train-test split was provided by the authors; thus, the train data was anomaly-free. However, the Yahoo S5 and NAB datasets did not have a predefined train and test split. We had to use the first part of a single signal for training and the rest for testing. For the artificial datasets, we could make this split because anomalies appeared at the same time across different signals. On the other hand, the real datasets still contained anomalies in the training data. Fitting prediction-based methods with anomalies significantly worsened the performance of the models.
+% ----------------------------------------------
+
+
+% ----------------------------------------------
+\section*{Further Research}
+\label{sec:06-further-research}
+% ----------------------------------------------
+The immediate next step towards continuing the research on using GANs for time-series anomaly detection is to improve the training of the networks. First, the networks should be trained for a longer period of time, with a lower learning rate for both the generators and discriminators. Secondly, for cycle-GAN models, the number of iterations should be lowered for the discriminator $D_Z$, and alternative latent-space distributions could be sampled instead of the standard Gaussian distribution \cite{white2016sampling_gans}. Stabilization of training will lead to better reconstructive and discriminative abilities, which, when combined, will give a better anomaly score.
+
+After ensuring a reliable training environment for the GAN models, the research should continue toward using reconstruction errors that are less sensitive to time shifts, such as dynamic time warping. Sudden changes in the structure of a time series, as well as random spikes, cannot and should not be reproduced exactly by reconstruction methods. In these extreme cases, small shifts often appear in the reconstruction and are heavily penalized by point-wise and area difference errors. Using an error metric that compares the overall shape of the reconstructed time series with the original could reduce the false-positive rate, which was a limitation in our current evaluation.
+
+Lastly, an intriguing research direction could be an evaluation of current methods on multivariate time-series datasets, in which each feature represents a separate signal. The analysis should focus on how effectively deep learning methods can learn the relationships between different signals and use this information to identify anomalous behavior. It would be valuable to compare them with simpler prediction methods that would fit features independently and aggregate the errors from each signal to identify outliers. 
+% ----------------------------------------------

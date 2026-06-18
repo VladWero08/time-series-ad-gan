@@ -1,0 +1,158 @@
+\chapter{Time-Series Anomaly Detection with GANs}
+\label{chap:04-time-series-anomaly-detection-with-gans}
+
+% ---------------------------------------------
+\section{Models Architecture}
+\label{sec:04-model-architecture}
+% ----------------------------------------------
+
+To evaluate the capabilities of GANs for time-series anomaly detection, we implemented the GAN-based models introduced in Chapter \ref{chap:03-related-work}. For TadGAN, we followed the architecture proposed by the authors \cite{geiger2020tadgan}. For MAD-GAN, however, the original paper encouraged the exploration of other neural networks for modeling the temporal correlation of time-series, and we did adapt the foundation of the model to match the generator $F: Z \to X$ and discriminator $D_X$ networks from TadGAN \cite{geiger2020tadgan}, to ensure a fair comparison between the two methods.
+
+\textbf{MAD-GAN} follows the standard GAN framework and serves as a baseline for assessing how well a standard GAN can support time-series anomaly detection. A significant change was the network used for the generator: a bidirectional LSTM, which is better suited to model subsequences extracted from any time point of the time-series. In our work, we implemented the networks as: 
+
+\begin{enumerate}
+    \item \textbf{Generator $G: Z \to X$}
+    \begin{itemize}
+        \item \textbf{Input:} latent space variables $ \in \mathbb{R}^{\text{batch\_size} \times s_w \times z_w}$.
+        \item \textbf{Output:} subsequences $ \in \mathbb{R}^{\text{batch\_size} \times s_w \times M}$.
+        \item \textbf{Network:} 
+            \begin{itemize}
+                \item \textbf{Bidirectional LSTM}: $\text{hidden} \: \text{size} = 64$, $\text{layers} = 2$.
+                \item \textbf{Linear}: $\text{in} = \text{hidden size} \times 2$, $\text{out} = M$.
+            \end{itemize}
+    \end{itemize}
+    
+    \item \textbf{Discriminator $D$}
+    \begin{itemize}
+        \item \textbf{Input:} subsequences $ \in \mathbb{R}^{\text{batch\_size} \times s_w \times M}$
+        \item \textbf{Output:} scores $ \in \mathbb{R}^{\text{batch\_size} \times 1}$
+        \item \textbf{Network:} 
+            \begin{itemize}
+                \item \textbf{Conv1d}: $\text{in} = M$, $\text{out} = 64$, $\text{kernel size} = 3$, $\text{padding}=1$
+                \item \textbf{Activation}: LeakyReLU($0.2$)                
+                \item \textbf{Conv1d}: $\text{in} = 64$, $\text{out} = 1$, $\text{kernel size} = 3$, $\text{padding}=1$
+                \item \textbf{Linear}: $\text{in} = s_w$, $\text{out} = 1$
+            \end{itemize}
+    \end{itemize}
+\end{enumerate}
+
+\textbf{TadGAN} is a more complex architecture, inspired by cycle GANs, with an additional generator and discriminator on top of the ones used in MAD-GAN. The generators are built using bidirectional LSTMs, while the discriminators use two convolutional layers to capture local temporal features of time-series.
+
+\begin{enumerate}
+    \item \textbf{Generator} $G: X \to Z$ for encoding
+    \begin{itemize}
+        \item \textbf{Input:} subsequences $ \in \mathbb{R}^{\text{batch\_size} \times s_w \times M}$
+        \item \textbf{Output:} latent space variables $ \in \mathbb{R}^{\text{batch\_size} \times s_w \times z_w}$
+        \item \textbf{Network:} 
+            \begin{itemize}
+                \item \textbf{Bidirectional LSTM}: $\text{hidden size} = 20$, $\text{layers} = 1$.
+                \item \textbf{Linear}: $\text{in} = \text{hidden size} \times 2$, $\text{out} = z_w$.
+            \end{itemize}
+    \end{itemize}
+
+    \item \textbf{Generator} $F: Z \to X$ for decoding
+    \begin{itemize}
+        \item \textbf{Input:} latent space variables $ \in \mathbb{R}^{\text{batch\_size} \times s_w \times z_w}$
+        \item \textbf{Output:} subsequences $ \in \mathbb{R}^{\text{batch\_size} \times s_w \times M}$
+        \item \textbf{Network:} 
+            \begin{itemize}
+                \item \textbf{Bidirectional LSTM}: $\text{hidden size} = 64$, $\text{layers} = 2$.
+                \item \textbf{Linear}: $\text{in} = \text{hidden size} \times 2$, $\text{out} = M$.
+            \end{itemize}
+    \end{itemize}
+
+    \item \textbf{Discriminator $D_X$}
+    \begin{itemize}
+        \item \textbf{Input:} subsequences $ \in \mathbb{R}^{\text{batch\_size} \times s_w \times M}$
+        \item \textbf{Output:} score $ \in \mathbb{R}^{\text{batch\_size} \times 1}$
+        \item \textbf{Network:} 
+            \begin{itemize}
+                \item \textbf{Conv1d}: $\text{in} = M$, $\text{out} = 64$, $\text{kernel size} = 3$, $\text{padding}=1$
+                \item \textbf{Activation}: LeakyReLU($0.2$)                
+                \item \textbf{Conv1d}: $\text{in} = 64$, $\text{out} = 1$, $\text{kernel size} = 3$, $\text{padding}=1$
+                \item \textbf{Linear}: $\text{in} = s_w$, $\text{out} = 1$
+            \end{itemize}
+    \end{itemize}
+
+    \item \textbf{Discriminator $D_Z$}
+    \begin{itemize} 
+        \item \textbf{Input:} latent space variables $ \in \mathbb{R}^{\text{batch\_size} \times s_w \times z_w}$
+        \item \textbf{Output:} score $ \in \mathbb{R}^{\text{batch\_size} \times 1}$
+        \item \textbf{Network:} 
+            \begin{itemize}
+                \item \textbf{Conv1d}: $\text{in} = z_w$, $\text{out} = 64$, $\text{kernel size} = 3$, $\text{padding}=1$
+                \item \textbf{Activation}: LeakyReLU($0.2$)
+                \item \textbf{Conv1d}: $\text{in} = 64$, $\text{out} = 1$, $\text{kernel size} = 3$, $\text{padding}=1$
+                \item \textbf{Linear}: $\text{in} = s_w$, $\text{out} = 1$
+            \end{itemize}
+        
+    \end{itemize}
+\end{enumerate}
+
+In Section \ref{sec:tad-gan}, we briefly mentioned that the Wasserstein loss was used for training the generators and discriminators in TadGAN, a loss that requires the discriminator to be a 1-Lipschitz continuous function. To ensure this condition, the norm of the discriminator's gradient must be equal to 1. A unit norm of the gradient can be achieved by weight clipping the gradient, which might constrain the learning capabilities of the discriminator, or by using a gradient penalty, which we adopted. 
+
+Interpolated samples are created by taking a random weighted average of real and fake data points and then passing them through the discriminator. The penalty is computed by taking the squared difference between the norm of the discriminator's gradient and the target value of 1. For both $D_X$ and $D_Z$ from TadGAN, as well as the $D$ from MAD-GAN, the gradient penalty was added into their objective function as a regularization term, weighted by $\lambda_{gp} = 10$. The gradient penalty is mathematically defined as:
+$$
+GP = \mathbb{E} \left[ \left( ||\nabla D(\textbf{x})||_2 - 1\right)^2 \right], \qquad \textbf{x} = \alpha x + (1-\alpha) G(z).
+$$
+
+Lastly, besides the Wasserstein loss and the gradient penalty, the forward-cycle loss is also used for the objective of Tad-GAN. It computes the $MSE$ loss between $x \in X$ and $F(G(x))$, opposed to the $MAE$ introduced in the original cycle-GAN \cite{zhu2017cyclegan}, to penalize errors more and improve outlier detection.
+
+% ----------------------------------------------
+
+
+% ----------------------------------------------
+\section{Anomaly Scoring}
+\label{sec:04-anomaly-scoring}
+% ----------------------------------------------
+
+In both MAD-GAN and TadGAN, the anomaly scores were computed as a convex combination of the reconstruction loss and the discriminator score. In TadGAN, these metrics were normalized into z-scores, as they might not have the same scale \cite{geiger2020tadgan}. In our experiments, we follow the same definition of the anomaly score: 
+$$a(x) = \alpha Z_{Res}(x) + (1-\alpha) Z_{D_X}(x),$$
+where $Z_{Res}(x)$ is the z-normalized reconstruction error and $Z_{D_X}(x)$ is the z-normalized discriminator score. Since the time-series is split into overlapping subsequences, the same point will receive multiple anomaly scores. To obtain a single final score for each point, the reconstruction errors are aggregated by taking the median value, while the discriminator scores are aggregated using kernel density estimation (KDE) to map the scores into a probability distribution and extract the maximum density value as a smoothed discriminator score \cite{geiger2020tadgan}.
+
+In MAD-GAN, the only reconstruction loss used was the \textbf{point-wise difference}, which measures the distance between the true value and the reconstructed value at every time step $x_t$:
+
+$$s_t = \left| x_t - \tilde{x_t}\right|.$$
+
+It is the most obvious metric for measuring how well the generator network can reconstruct the data, but it has the downside of not considering its surrounding context. It is not robust for collective anomalies. As previously mentioned in Section \ref{sec:tad-gan}, TadGAN explores two additional reconstruction errors that should overcome the problem of the point-wise difference error. 
+
+\textbf{Area difference} \cite{geiger2020tadgan} represent the average distance between the windows of length $l$ around a point in time $x_t$ and it is defined as:
+
+$$s_t = \frac{1}{2 \times l} \left| \int_{t-l}^{t+l} x^t - \tilde{x}^t\,dx \right|.$$
+
+The authors demonstrated that even if it is not a popular metric in the context of time-series anomaly detection, it can work well in many situations \cite{geiger2020tadgan}. Since we have access only to a portion of values in the interval $[ t-l, t+l]$, in implementation, the integral was calculated using the trapezoidal rule \cite{geiger2020tadgan}. The trapezoidal rule transforms the area difference error into:
+
+$$s_t = \frac{1}{2 \times l} \sum_{i=t-l}^{t+l} \left| x_{i} - \tilde{x}_{i} \right|.$$
+
+\textbf{Dynamic time warping (DTW)} is a measure that computes the similarity between two time-series using dynamic programming, aiming at minimizing the cumulative distance of their warp \cite{berndt1994dtw}. It takes into account temporal misalignment, thus being less sensitive to small time shifts compared to point-wise difference and area difference. 
+
+Given the original time-series sequence $X_t = (x_{t-l}, x_{t-l+1},\dots,x_{t+l-1}, x_{t+l})$, the reconstructed time-series sequence $\tilde{X_t} = (\tilde{x}_{t-l}, \tilde{x}_{t-l+1},\dots, \tilde{x}_{t+l-1}, \tilde{x}_{t+l})$, and a warping path $W = (w_1, w_2, \dots, w_k)$, we can define the DTW‑based reconstruction score at time $t$ as:
+
+$$s_t = DTW(X_t, \tilde{X_t})= \min_W \sum_{i=1}^k \delta(w_i),$$
+
+where $\delta(\cdot)$ is a distance measure between two time‑series elements, usually Euclidean distance. Subject to boundary, continuity, and monotonicity conditions, the dynamic programming formulation of this problem builds a cost matrix $\gamma(i,j)$ as:
+
+$$\gamma(i, j) = \delta(i,j) + min(\gamma(i-1,j), \gamma(i, j-1), \gamma(i-1, j-1)),$$
+
+with $\delta(i,j) = |x_i - \tilde{x}_j|$ is the distance metric between the points $x_i$ and $\tilde{x}_j$. For a single point from a time-series, the $DTW$ was computed for a window around itself of $size = 10$, and it was used as the reconstruction error for that point. 
+
+To detect point anomalies, the anomaly scores of the test set were evaluated against the distribution of the training set scores. A test sample was classified as an outlier if its anomaly score lay more than four standard deviations away from the mean of the training anomaly score distribution.
+
+On the other hand, to detect collective anomalies, more advanced thresholding techniques were applied. In this work, we adopted the method proposed in \cite{geiger2020tadgan}. For TadGAN, the time-series was divided into subsequences, with a sliding window of size $\frac{T}{3}$ and step size $\frac{T}{3 \times 10}$. Within each subsequence, a point was labeled as anomalous if its anomaly score was more than four standard deviations away from the mean value of the subsequence. Consecutive anomalous points formed an anomalous sequence, a collective anomaly, denoted as $a_{seq}^i = (a_{start(i)}, \dots, a_{end(i)})$ \cite{geiger2020tadgan}. An anomalous point might inflate the standard deviation of the anomaly score distribution, because it is sensitive to extreme values. Thus, we chose a quantile-based approach, in which a point was labeled as anomalous if it exceeded the $99.5\%$ quantile of the window anomaly score distribution. This detection method is more robust to skewed error distributions, which will certainly appear when using sliding windows.
+
+Another issue caused by the use of sliding windows is the large number of false positives, which, in the context of anomaly detection, leads to false alarms and a waste of resources. To overcome this issue, consider the set of $K$ anomalous sequences detected, $\{a_{\text{seq}}^i, i=1,2,\dots,K\}$. For each sequence, we retained the maximum anomaly score as its representative score, denoted by $a_{\max}^i \in (a_{start(i)},\dots, a_{end(i)})$. The resulting maximum scores are then sorted in descending order, $\{a_{\max}^i, i=1,2,\dots, K\}$. We then computed the relative decrease between consecutive scores as $p_i = \left(a_{\max}^{i-1} - a_{\max}^i\right) / a_{\max}^{i-1}$. For the first relative decrease that is smaller than a threshold $\theta$, which is usually set to $0.1$, then all subsequent sequences, $\{a_{\max}^j \mid i \leq j \leq K\}$, were relabeled as normal. The following $a_{seq}^j$ collective anomalies were considered weaker versions of previously observed anomalies and were therefore treated as false positives. 
+% ----------------------------------------------
+
+
+% ----------------------------------------------
+\section{Implementation}
+\label{sec:04-implementation}
+% ----------------------------------------------
+We implemented the proposed models using Python 3.12 and the PyTorch library. The training and testing were performed on an RTX 5080 GPU, which accelerated the learning pipeline. However, this setup was not satisfactory for training the generative adversarial networks in the same manner as in \cite{geiger2020tadgan}. To overcome this computing difficulty, the hyperparameters proposed were modified by reducing the number of epochs and using a higher learning rate.
+
+Both MAD-GAN and TadGAN were trained for $1000$ epochs, contrary to the $2000$ epochs proposed, using the $Adam$ optimizer with $\beta_1 = 0.5$ and a learning rate of $lr = 1e-5$ for all generators and discriminators. The batch size of $64$ was kept for all the evaluated datasets. The training setup used the Wasserstein loss to stabilize the adversarial framework, limiting the discriminators to be 1-Lipschitz continuous using gradient penalty regularization. For TadGAN, $MSE$ penalized the forward cycle-consistency error. To balance the adversarial learning in TadGAN, each discriminator was trained for $n_{\text{critics}} = 5$ iterations for every generator training iteration.
+
+After training and obtaining anomaly scores, we implemented all three reconstruction errors presented: point, area, and DTW. Unfortunately, because we used a sliding window of $s_w=100$ to compute the subsequences, this meant that the DTW matrix would be of shape $(100 \times 100)$, and we would have $O(N \times 100 \times 100)$ operations per signal. Together with the training pipeline of two GAN models, it would have been too expensive to compute. Thus, for evaluation, we only used the point-wise and area errors with $\alpha = 0.5$ to balance the reconstruction errors with the discriminator scores.
+
+Besides Tad-GAN and the modified MAD-GAN architecture proposed, we also implemented the forecasting LSTM model, following the description from \cite{hundman2018detecting}, and the LSTM autoencoder. The source code for all implemented architectures is publicly accessible as an open-source repository. \footnote{\url{https://github.com/VladWero08/time-series-ad-gan}}
+% ----------------------------------------------
