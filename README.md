@@ -41,3 +41,5 @@ The results reported below correspond to the best F1-score obtained by each meth
 | TadGAN   | 0.366 | 0.406 | 0.537 | 0.684 | 0.160 | 0.272 | 0.389 | 0.333 | **0.806** | 0.000 | 0.194 | 0.377 |
 | LSTM-AE  | 0.346 | 0.220 | 0.657 | 0.514 | 0.370 | 0.200 | 0.344 | 0.500 | 0.373 | 0.381 | 0.190 | 0.372 |
 | MAD-GAN  | 0.347 | 0.345 | 0.537 | 0.357 | 0.152 | 0.090 | 0.261 | 0.333 | 0.334 | 0.071 | 0.164 | 0.271 |
+
+For more details, we suggest you to read the [thesis](https://github.com/VladWero08/time-series-ad-gan/blob/main/documents/thesis/Time%20Series%20Anomaly%20Detection%20with%20Generative%20Adversial%20Networks%20-%20Olaeriu%20Vlad%20Mihai.pdf).
